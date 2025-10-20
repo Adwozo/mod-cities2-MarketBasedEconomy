@@ -1,0 +1,9 @@
+D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\obj\Debug\net48\MarketBasedEconomy.csproj.AssemblyReference.cache
+D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\obj\Debug\net48\MarketBasedEconomy.GeneratedMSBuildEditorConfig.editorconfig
+D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\obj\Debug\net48\MarketBasedEconomy.AssemblyInfoInputs.cache
+D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\obj\Debug\net48\MarketBasedEconomy.AssemblyInfo.cs
+D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\obj\Debug\net48\MarketBasedEconomy.csproj.CoreCompileInputs.cache
+D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\bin\Debug\net48\MarketBasedEconomy.dll
+D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\bin\Debug\net48\MarketBasedEconomy.pdb
+D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\obj\Debug\net48\MarketBasedEconomy.dll
+D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\obj\Debug\net48\MarketBasedEconomy.pdb
