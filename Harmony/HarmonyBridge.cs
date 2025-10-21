@@ -3,6 +3,7 @@ using System.Reflection;
 using Colossal.Logging;
 using Game.Economy;
 using Game.Prefabs;
+using Game.Simulation;
 using Unity.Entities;
 
 namespace MarketBasedEconomy.Harmony
@@ -52,6 +53,7 @@ namespace MarketBasedEconomy.Harmony
         {
             // Add all patches you want to apply here
             ApplyMarketPricePostfix(harmonyId);
+            ApplyWorkforceMaintenancePostfix(harmonyId);
         }
 
         public static void ApplyMarketPricePostfix(string harmonyId)
@@ -76,6 +78,27 @@ namespace MarketBasedEconomy.Harmony
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to apply Harmony market price postfix");
+            }
+        }
+
+        public static void ApplyWorkforceMaintenancePostfix(string harmonyId)
+        {
+            if (!Initialize()) return;
+
+            try
+            {
+                var target = typeof(WorkProviderSystem).GetNestedType("WorkProviderTickJob", BindingFlags.NonPublic)
+                    ?.GetMethod("UpdateNotificationAndEfficiency", BindingFlags.Instance | BindingFlags.NonPublic);
+
+                var postfix = typeof(HarmonyBridge).GetMethod(nameof(WorkforceMaintenancePostfix), BindingFlags.NonPublic | BindingFlags.Static);
+
+                if (!PatchPostfix(harmonyId, target, postfix)) return;
+
+                Log.Info("Applied workforce maintenance postfix.");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to apply Harmony workforce maintenance postfix");
             }
         }
 
@@ -110,6 +133,12 @@ namespace MarketBasedEconomy.Harmony
         private static void MarketPricePostfix(Resource r, ref float __result)
         {
             __result = Economy.MarketEconomyManager.Instance.AdjustMarketPrice(r, __result);
+        }
+
+        private static void WorkforceMaintenancePostfix(int sortKey, Entity buildingEntity, DynamicBuffer<Employee> employees, Workplaces maxWorkplaces, Workplaces freeWorkplaces, ref WorkProvider workProvider, BufferLookup<Resources> __stateResources, ComponentLookup<Resources> __stateComponentResources)
+        {
+            var manager = Economy.WorkforceUtilizationManager.Instance;
+            manager?.EnforceUtilizationAndMaintenance(buildingEntity, employees, maxWorkplaces, ref workProvider, __stateComponentResources, __stateResources);
         }
     }
 }

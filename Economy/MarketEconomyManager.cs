@@ -15,6 +15,7 @@ namespace MarketBasedEconomy.Economy
         private static readonly Lazy<MarketEconomyManager> s_Instance = new(() => new MarketEconomyManager());
         private readonly ILog m_Log = LogManager.GetLogger($"{nameof(MarketBasedEconomy)}.{nameof(MarketEconomyManager)}");
         private BudgetSystem m_BudgetSystem;
+        private CountHouseholdDataSystem m_HouseholdDataSystem;
 
         private MarketEconomyManager()
         {
@@ -37,6 +38,26 @@ namespace MarketBasedEconomy.Economy
         /// Controls how aggressively the system reacts to demand imbalance. Range [0,1].
         /// </summary>
         public float Sensitivity { get; set; } = 0.65f;
+
+        /// <summary>
+        /// How strongly external trade pricing influences local market prices. Range [0,1].
+        /// </summary>
+        public float ExternalPriceInfluence { get; set; } = 0.35f;
+
+        /// <summary>
+        /// Baseline share of well/highly educated workers expected in the city workforce.
+        /// </summary>
+        public float EducationBaseline { get; set; } = 0.25f;
+
+        /// <summary>
+        /// Bonus multiplier applied per point above the education baseline.
+        /// </summary>
+        public float EducationPremiumStrength { get; set; } = 0.6f;
+
+        /// <summary>
+        /// Penalty multiplier applied per point below the education baseline.
+        /// </summary>
+        public float EducationPenaltyStrength { get; set; } = 0.35f;
 
         /// <summary>
         /// Clears cached references so the next request resolves fresh systems.
@@ -68,7 +89,23 @@ namespace MarketBasedEconomy.Economy
             float sensitivity = math.clamp(Sensitivity, 0f, 1f);
             float multiplier = math.clamp(1f + (ratio - 1f) * sensitivity, MinimumPriceMultiplier, MaximumPriceMultiplier);
 
-            return vanillaPrice * multiplier;
+            float price = vanillaPrice * multiplier;
+
+            float externalBlend = math.clamp(ExternalPriceInfluence, 0f, 1f);
+            if (externalBlend > 0f)
+            {
+                float externalPrice = ComputeExternalReferencePrice(snapshot, price);
+                price = math.lerp(price, externalPrice, externalBlend);
+            }
+
+            if (TryGetEducationMultiplier(out float educationMultiplier))
+            {
+                price *= educationMultiplier;
+            }
+
+            float minPrice = vanillaPrice * MinimumPriceMultiplier;
+            float maxPrice = vanillaPrice * MaximumPriceMultiplier;
+            return math.clamp(price, minPrice, maxPrice);
         }
 
         /// <summary>
@@ -137,6 +174,86 @@ namespace MarketBasedEconomy.Economy
             }
 
             return m_BudgetSystem;
+        }
+
+        private CountHouseholdDataSystem GetHouseholdDataSystem()
+        {
+            if (m_HouseholdDataSystem != null)
+            {
+                return m_HouseholdDataSystem;
+            }
+
+            var world = World.DefaultGameObjectInjectionWorld;
+            if (world == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                m_HouseholdDataSystem = world.GetExistingSystemManaged<CountHouseholdDataSystem>();
+            }
+            catch (Exception ex)
+            {
+                m_Log.Warn(ex, "Unable to resolve CountHouseholdDataSystem for education metrics.");
+            }
+
+            return m_HouseholdDataSystem;
+        }
+
+        private float ComputeExternalReferencePrice(in MarketSnapshot snapshot, float fallbackPrice)
+        {
+            int tradeAmount = math.abs(snapshot.TradeBalance);
+            if (tradeAmount <= 0)
+            {
+                return fallbackPrice;
+            }
+
+            float external = math.abs(snapshot.TradeWorth) / tradeAmount;
+            if (!math.isfinite(external) || external <= 0f)
+            {
+                return fallbackPrice;
+            }
+
+            return external;
+        }
+
+        private bool TryGetEducationMultiplier(out float multiplier)
+        {
+            multiplier = 1f;
+            var householdSystem = GetHouseholdDataSystem();
+            if (householdSystem == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                var householdData = householdSystem.GetHouseholdCountData();
+                int workable = math.max(1, householdData.m_WorkableCitizenCount);
+                int wellEducated = math.max(0, householdData.m_WellEducatedCount);
+                int highlyEducated = math.max(0, householdData.m_HighlyEducatedCount);
+
+                float educatedShare = (wellEducated + highlyEducated) / (float)workable;
+                float baseline = math.saturate(EducationBaseline);
+                float delta = educatedShare - baseline;
+
+                if (delta >= 0f)
+                {
+                    multiplier = math.clamp(1f + delta * math.max(0f, EducationPremiumStrength), 0.5f, 1.8f);
+                }
+                else
+                {
+                    multiplier = math.clamp(1f + delta * math.max(0f, EducationPenaltyStrength), 0.5f, 1.8f);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                m_Log.Warn(ex, "Failed to evaluate education-based multiplier.");
+                return false;
+            }
         }
     }
 
