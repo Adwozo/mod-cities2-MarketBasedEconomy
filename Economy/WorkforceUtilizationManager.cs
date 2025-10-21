@@ -1,7 +1,9 @@
 using System;
 using Colossal.Logging;
+using Game;
 using Game.Companies;
 using Game.Economy;
+using Game.Prefabs;
 using Game.Simulation;
 using Unity.Collections;
 using Unity.Entities;
@@ -53,14 +55,19 @@ namespace MarketBasedEconomy.Economy
                 None = Array.Empty<ComponentType>()
             });
 
-            var employeesLookup = entityManager.GetBufferLookup<Employee>(true);
-            var resourcesLookup = entityManager.GetComponentLookup<Resources>(false);
-            var resourceBuffers = entityManager.GetBufferLookup<Resources>(false);
-
-            var commandBuffer = system.World.GetExistingSystemManaged<EndFrameBarrier>().CreateCommandBuffer();
+            var employeesLookup = system.GetBufferLookup<Employee>(true);
+            var resourceBuffers = system.GetBufferLookup<Resources>(false);
+            var maintenanceLookup = system.GetComponentLookup<WorkforceMaintenanceState>(false);
 
             using var entities = workProviderQuery.ToEntityArray(Allocator.TempJob);
             using var providers = workProviderQuery.ToComponentDataArray<WorkProvider>(Allocator.TempJob);
+
+            if (entities.Length == 0)
+            {
+                return;
+            }
+
+            var commandBuffer = World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged<EndFrameBarrier>().CreateCommandBuffer();
 
             for (int i = 0; i < entities.Length; i++)
             {
@@ -72,14 +79,25 @@ namespace MarketBasedEconomy.Economy
                     continue;
                 }
 
-                var employees = employeesLookup[entity];
-                var maxWorkplaces = EconomyUtils.CalculateNumberOfWorkplaces(provider.m_MaxWorkers, WorkplaceComplexity.Simple, 1);
-                ApplyUtilizationAndMaintenance(entity, employees, maxWorkplaces, ref provider, resourcesLookup, resourceBuffers);
+                bool hasState = maintenanceLookup.HasComponent(entity);
+                var state = hasState ? maintenanceLookup[entity] : new WorkforceMaintenanceState();
+
+                ApplyUtilizationAndMaintenance(entity, employeesLookup[entity], ref provider, ref state, resourceBuffers);
+
+                if (hasState)
+                {
+                    commandBuffer.SetComponent(entity, state);
+                }
+                else
+                {
+                    commandBuffer.AddComponent(entity, state);
+                }
+
                 commandBuffer.SetComponent(entity, provider);
             }
         }
 
-        private void ApplyUtilizationAndMaintenance(Entity workplaceEntity, DynamicBuffer<Employee> employees, Workplaces maxWorkplaces, ref WorkProvider workProvider, ComponentLookup<Resources> resourcesLookup, BufferLookup<Resources> resourceBuffers)
+        private void ApplyUtilizationAndMaintenance(Entity workplaceEntity, DynamicBuffer<Employee> employees, ref WorkProvider workProvider, ref WorkforceMaintenanceState state, BufferLookup<Resources> resourceBuffers)
         {
             int maxCapacity = math.max(1, workProvider.m_MaxWorkers);
             int staffed = employees.Length;
@@ -89,33 +107,30 @@ namespace MarketBasedEconomy.Economy
             if (utilization < minShare && workProvider.m_MaxWorkers > 0)
             {
                 int target = math.max((int)math.ceil(minShare * maxCapacity), 1);
+                Diagnostics.DiagnosticsLogger.Log($"Utilization low for {workplaceEntity.Index}: staffed={staffed} capacity={maxCapacity} reducing maxWorkers to {target}");
                 workProvider.m_MaxWorkers = math.min(workProvider.m_MaxWorkers, target);
             }
 
             float maintenancePerDay = (BaseMaintenancePerDay + MaintenancePerCapacity * maxCapacity) * math.max(0f, MaintenanceCostMultiplier);
-            maintenancePerDay *= math.max(0f, MaintenanceCostMultiplier);
             if (utilization < minShare)
             {
                 maintenancePerDay *= UnderUtilizationPenaltyMultiplier;
             }
 
-            workProvider.m_MaintenanceBuffer += maintenancePerDay / EconomyUtils.kCompanyUpdatesPerDay;
-            if (workProvider.m_MaintenanceBuffer >= MaintenanceFeeThreshold)
+            state.AccumulatedMaintenance += maintenancePerDay / EconomyUtils.kCompanyUpdatesPerDay;
+            int deduction = (int)math.floor(state.AccumulatedMaintenance);
+            if (deduction <= 0)
             {
-                int deduction = (int)math.floor(workProvider.m_MaintenanceBuffer);
-                workProvider.m_MaintenanceBuffer -= deduction;
-                workProvider.m_MaintenanceDebt += deduction;
+                return;
+            }
 
-                if (resourceBuffers.HasBuffer(workplaceEntity))
-                {
-                    var buffer = resourceBuffers[workplaceEntity];
-                    EconomyUtils.AddResources(Resource.Money, -deduction, buffer);
-                }
-                else if (resourcesLookup.HasComponent(workplaceEntity))
-                {
-                    var buffer = resourcesLookup.GetRefRO(workplaceEntity);
-                    EconomyUtils.AddResources(Resource.Money, -deduction, buffer.Value);
-                }
+            state.AccumulatedMaintenance -= deduction;
+            Diagnostics.DiagnosticsLogger.Log($"Maintenance deduction for {workplaceEntity.Index}: {deduction} (buffer={state.AccumulatedMaintenance:F2})");
+
+            if (resourceBuffers.HasBuffer(workplaceEntity))
+            {
+                var buffer = resourceBuffers[workplaceEntity];
+                EconomyUtils.AddResources(Resource.Money, -deduction, buffer);
             }
         }
     }

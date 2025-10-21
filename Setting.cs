@@ -5,6 +5,7 @@ using Game.Input;
 using Game.Modding;
 using Game.Settings;
 using Game.UI;
+using Game.UI.Localization;
 using Game.UI.Widgets;
 using MarketBasedEconomy.Economy;
 using Unity.Mathematics;
@@ -25,6 +26,19 @@ namespace MarketBasedEconomy
 
         public const string kEconomyGroup = "Economy";
         public const string kButtonGroup = "Button";
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public bool EnableDiagnosticsLog
+        {
+            get => Diagnostics.DiagnosticsLogger.Enabled;
+            set
+            {
+                Diagnostics.DiagnosticsLogger.Enabled = value;
+                if (value)
+                {
+                    Diagnostics.DiagnosticsLogger.Initialize();
+                }
+            }
+        }
         [SettingsUISlider(min = 0f, max = 1f, step = 0.05f)]
         [SettingsUISection(kSection, kEconomyGroup)]
         public float ExternalMarketWeight
@@ -125,6 +139,18 @@ namespace MarketBasedEconomy
         [SettingsUISection(kSection, kDropdownGroup)]
         public int IntDropdown { get; set; }
 
+        public static IEnumerable<DropdownItem<int>> GetIntDropdownItems()
+        {
+            for (int i = 0; i <= 10; i++)
+            {
+                yield return new DropdownItem<int>
+                {
+                    value = i,
+                    displayName = LocalizedString.Value(i.ToString())
+                };
+            }
+        }
+
         [SettingsUISection(kSection, kDropdownGroup)]
         public SomeEnum EnumDropdown { get; set; } = SomeEnum.Value1;
 
@@ -195,6 +221,8 @@ namespace MarketBasedEconomy
             var laborManager = LaborMarketManager.Instance;
             laborManager.UnemploymentWagePenalty = 0.6f;
             laborManager.SkillShortagePremium = 0.8f;
+
+            Diagnostics.DiagnosticsLogger.Enabled = false;
         }
 
         public enum SomeEnum
@@ -253,6 +281,9 @@ namespace MarketBasedEconomy
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.SkillShortagePremium)), "Skill shortage wage premium" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.SkillShortagePremium)), "Wage increase factor applied when few skilled workers are available." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.EnableDiagnosticsLog)), "Enable diagnostics log" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.EnableDiagnosticsLog)), "Write detailed economy diagnostics to MarketEconomy.log for balancing and debugging." },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Button)), "Button" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Button)), $"Simple single button. It should be bool property with only setter or use [{nameof(SettingsUIButtonAttribute)}] to make button from bool property with setter and getter" },

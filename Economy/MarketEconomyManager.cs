@@ -84,6 +84,7 @@ namespace MarketBasedEconomy.Economy
 
             float minPrice = vanillaPrice * MinimumPriceMultiplier;
             float maxPrice = vanillaPrice * MaximumPriceMultiplier;
+            Diagnostics.DiagnosticsLogger.Log($"Price adjust {resource}: vanilla={vanillaPrice:F2} multiplier={multiplier:F2} externalBlend={externalBlend:F2} result={price:F2}");
             return math.clamp(price, minPrice, maxPrice);
         }
 
