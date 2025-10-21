@@ -58,11 +58,13 @@ namespace MarketBasedEconomy.Economy
         {
             if (vanillaPrice <= 0f || resource == Resource.NoResource)
             {
+                Diagnostics.DiagnosticsLogger.Log($"Price adjust skipped for {resource}: vanilla={vanillaPrice:F2}.");
                 return vanillaPrice;
             }
 
             if (!TryGetSnapshot(resource, out var snapshot))
             {
+                Diagnostics.DiagnosticsLogger.Log($"No market snapshot for {resource}; using vanilla price {vanillaPrice:F2}.");
                 return vanillaPrice;
             }
 
@@ -76,16 +78,20 @@ namespace MarketBasedEconomy.Economy
             float price = vanillaPrice * multiplier;
 
             float externalBlend = math.clamp(ExternalPriceInfluence, 0f, 1f);
+            float externalPrice = price;
             if (externalBlend > 0f)
             {
-                float externalPrice = ComputeExternalReferencePrice(snapshot, price);
+                externalPrice = ComputeExternalReferencePrice(snapshot, price);
                 price = math.lerp(price, externalPrice, externalBlend);
             }
 
             float minPrice = vanillaPrice * MinimumPriceMultiplier;
             float maxPrice = vanillaPrice * MaximumPriceMultiplier;
-            Diagnostics.DiagnosticsLogger.Log($"Price adjust {resource}: vanilla={vanillaPrice:F2} multiplier={multiplier:F2} externalBlend={externalBlend:F2} result={price:F2}");
-            return math.clamp(price, minPrice, maxPrice);
+            float clampedPrice = math.clamp(price, minPrice, maxPrice);
+
+            Diagnostics.DiagnosticsLogger.Log($"Price adjust {resource}: vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, ratio={ratio:F2}, multiplier={multiplier:F2}, externalBlend={externalBlend:F2}, externalPrice={externalPrice:F2}, result={price:F2}, clamped={clampedPrice:F2}");
+
+            return clampedPrice;
         }
 
         /// <summary>
@@ -121,6 +127,9 @@ namespace MarketBasedEconomy.Economy
                     Supply = math.max(1f, processingWorkers.x + serviceWorkers.x),
                     Demand = math.max(1f, processingWorkers.y + serviceWorkers.y)
                 };
+
+                Diagnostics.DiagnosticsLogger.Log(
+                    $"Snapshot {resource}: supply={snapshot.Supply:F1}, demand={snapshot.Demand:F1}, processingWorkers=({processingWorkers.x}/{processingWorkers.y}), serviceWorkers=({serviceWorkers.x}/{serviceWorkers.y}), processingCompanies={processingCompanies}, serviceCompanies={serviceCompanies}, tradeBalance={tradeBalance}, tradeWorth={tradeWorth}");
 
                 return true;
             }

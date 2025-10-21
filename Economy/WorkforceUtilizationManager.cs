@@ -76,11 +76,14 @@ namespace MarketBasedEconomy.Economy
 
                 if (!employeesLookup.HasBuffer(entity))
                 {
+                    Diagnostics.DiagnosticsLogger.Log($"Entity {entity.Index} has no employee buffer; skipping utilization check.");
                     continue;
                 }
 
                 bool hasState = maintenanceLookup.HasComponent(entity);
                 var state = hasState ? maintenanceLookup[entity] : new WorkforceMaintenanceState();
+
+                Diagnostics.DiagnosticsLogger.Log($"Processing entity {entity.Index}: currentMaxWorkers={provider.m_MaxWorkers}, existingMaintenance={state.AccumulatedMaintenance:F2}");
 
                 ApplyUtilizationAndMaintenance(entity, employeesLookup[entity], ref provider, ref state, resourceBuffers);
 
@@ -91,9 +94,11 @@ namespace MarketBasedEconomy.Economy
                 else
                 {
                     commandBuffer.AddComponent(entity, state);
+                    Diagnostics.DiagnosticsLogger.Log($"Added maintenance state for entity {entity.Index}.");
                 }
 
                 commandBuffer.SetComponent(entity, provider);
+                Diagnostics.DiagnosticsLogger.Log($"Updated WorkProvider for entity {entity.Index}: newMaxWorkers={provider.m_MaxWorkers}, accumulatedMaintenance={state.AccumulatedMaintenance:F2}");
             }
         }
 
@@ -102,6 +107,8 @@ namespace MarketBasedEconomy.Economy
             int maxCapacity = math.max(1, workProvider.m_MaxWorkers);
             int staffed = employees.Length;
             float utilization = staffed / (float)maxCapacity;
+
+            Diagnostics.DiagnosticsLogger.Log($"Entity {workplaceEntity.Index} utilization: staffed={staffed}, capacity={maxCapacity}, utilization={utilization:P1}");
 
             float minShare = math.clamp(MinimumUtilizationShare, 0.05f, 0.95f);
             if (utilization < minShare && workProvider.m_MaxWorkers > 0)
@@ -117,10 +124,13 @@ namespace MarketBasedEconomy.Economy
                 maintenancePerDay *= UnderUtilizationPenaltyMultiplier;
             }
 
+            Diagnostics.DiagnosticsLogger.Log($"Maintenance accrual for {workplaceEntity.Index}: base={BaseMaintenancePerDay:F1}, perCapacity={MaintenancePerCapacity:F1}, multiplier={MaintenanceCostMultiplier:F2}, underUtilPenalty={(utilization < minShare ? UnderUtilizationPenaltyMultiplier : 1f):F2}, totalPerDay={maintenancePerDay:F1}");
+
             state.AccumulatedMaintenance += maintenancePerDay / EconomyUtils.kCompanyUpdatesPerDay;
             int deduction = (int)math.floor(state.AccumulatedMaintenance);
             if (deduction <= 0)
             {
+                Diagnostics.DiagnosticsLogger.Log($"Accumulating maintenance for {workplaceEntity.Index}: buffer={state.AccumulatedMaintenance:F2} (no deduction yet).");
                 return;
             }
 
@@ -131,6 +141,11 @@ namespace MarketBasedEconomy.Economy
             {
                 var buffer = resourceBuffers[workplaceEntity];
                 EconomyUtils.AddResources(Resource.Money, -deduction, buffer);
+                Diagnostics.DiagnosticsLogger.Log($"Applied maintenance charge to entity {workplaceEntity.Index}: -{deduction} money");
+            }
+            else
+            {
+                Diagnostics.DiagnosticsLogger.Log($"Entity {workplaceEntity.Index} missing resource buffer; maintenance deduction not applied.");
             }
         }
     }

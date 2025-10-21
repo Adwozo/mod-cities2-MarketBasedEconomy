@@ -26,12 +26,14 @@ namespace MarketBasedEconomy.Economy
         {
             if (currentWage <= 0)
             {
+                Diagnostics.DiagnosticsLogger.Log($"Wage adjust skipped: base wage {currentWage} <= 0.");
                 return currentWage;
             }
 
             var householdSystem = GetHouseholdDataSystem();
             if (householdSystem == null)
             {
+                Diagnostics.DiagnosticsLogger.Log("Household system unavailable; using vanilla wage.");
                 return currentWage;
             }
 
@@ -47,15 +49,23 @@ namespace MarketBasedEconomy.Economy
                 float skillShortage = math.saturate(0.3f - skilledShare);
 
                 float wageMultiplier = 1f;
-                wageMultiplier -= unemploymentRate * math.max(0f, UnemploymentWagePenalty);
-                wageMultiplier += skillShortage * math.max(0f, SkillShortagePremium);
+                float penalty = unemploymentRate * math.max(0f, UnemploymentWagePenalty);
+                float premium = skillShortage * math.max(0f, SkillShortagePremium);
+                wageMultiplier -= penalty;
+                wageMultiplier += premium;
                 wageMultiplier = math.clamp(wageMultiplier, 0.5f, 1.75f);
 
-                return (int)math.max(1f, currentWage * wageMultiplier);
+                int adjusted = (int)math.max(1f, currentWage * wageMultiplier);
+
+                Diagnostics.DiagnosticsLogger.Log(
+                    $"Wage adjust: workforce={workforce}, employed={employed}, unemployment={unemploymentRate:P1}, skilledShare={skilledShare:P1}, penalty={penalty:F2}, premium={premium:F2}, multiplier={wageMultiplier:F2}, base={currentWage}, adjusted={adjusted}");
+
+                return adjusted;
             }
             catch (Exception ex)
             {
                 m_Log.Warn(ex, "Failed to adjust wage with labor market data.");
+                Diagnostics.DiagnosticsLogger.Log($"Wage adjust exception: {ex.Message}");
                 return currentWage;
             }
         }
