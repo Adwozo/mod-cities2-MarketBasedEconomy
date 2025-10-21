@@ -3,6 +3,7 @@
 	<PropertyGroup>
 		<Configurations>Debug;Release</Configurations>
 		<TargetFramework>net48</TargetFramework>
+		<LangVersion>latest</LangVersion>
 	
 		<!--The file where mod information which is required for publishing mod on PDX mods are stored-->
 		<PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
@@ -15,6 +16,13 @@
 	  <Compile Remove="ref\**" />
 	  <EmbeddedResource Remove="ref\**" />
 	  <None Remove="ref\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="0Harmony">
+			<HintPath>lib\0Harmony.dll</HintPath>
+			<Private>true</Private>
+		</Reference>
 	</ItemGroup>
 
 	<ItemGroup>

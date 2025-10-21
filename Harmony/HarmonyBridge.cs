@@ -5,6 +5,7 @@ using Game.Companies;
 using Game.Economy;
 using Game.Prefabs;
 using Game.Simulation;
+using HarmonyLib;
 using Unity.Entities;
 
 namespace MarketBasedEconomy.Harmony
@@ -12,56 +13,51 @@ namespace MarketBasedEconomy.Harmony
     internal static class HarmonyBridge
     {
         private static readonly ILog Log = LogManager.GetLogger($"{nameof(MarketBasedEconomy)}.{nameof(HarmonyBridge)}").SetShowsErrorsInUI(false);
-
-        private static Type _harmonyType;
-        private static Type _harmonyMethodType;
-        private static MethodInfo _patchMethod;
-        private static bool _initialized;
-
-        public static bool Initialize()
-        {
-            if (_initialized)
-                return _harmonyType != null;
-
-            _initialized = true;
-            try
-            {
-                // Try Harmony v2 namespace first.
-                _harmonyType = Type.GetType("HarmonyLib.Harmony, HarmonyLib")
-                               ?? Type.GetType("Harmony.HarmonyInstance, 0Harmony");
-
-                if (_harmonyType == null)
-                {
-                    Log.Warn("Harmony not found. Market price patch will not be applied.");
-                    return false;
-                }
-
-                _harmonyMethodType = _harmonyType.Assembly.GetType("HarmonyLib.HarmonyMethod")
-                                   ?? _harmonyType.Assembly.GetType("Harmony.HarmonyMethod");
-
-                _patchMethod = _harmonyType.GetMethod("Patch", BindingFlags.Instance | BindingFlags.Public);
-
-                return _harmonyMethodType != null && _patchMethod != null;
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to initialize Harmony bridge");
-                return false;
-            }
-        }
+        private static readonly HarmonyLib.Harmony HarmonyInstance = new HarmonyLib.Harmony(Mod.HarmonyId);
+        private static bool _patchesApplied;
 
         public static void ApplyAll(string harmonyId)
         {
-            // Add all patches you want to apply here
-            ApplyMarketPricePostfix(harmonyId);
-            ApplyWorkforceMaintenancePostfix(harmonyId);
-            ApplyWageAdjustmentPostfix(harmonyId);
+            if (_patchesApplied)
+            {
+                return;
+            }
+
+            ApplyExecutableAssetFilterPatch();
+            HarmonyInstance.PatchAll(typeof(HarmonyBridge).Assembly);
+            ApplyMarketPricePostfix();
+            ApplyWorkforceMaintenancePostfix();
+            ApplyWageAdjustmentPostfix();
+
+            _patchesApplied = true;
         }
 
-        public static void ApplyMarketPricePostfix(string harmonyId)
+        private static void ApplyExecutableAssetFilterPatch()
         {
-            if (!Initialize()) return;
+            try
+            {
+                var executableAssetType = AccessTools.TypeByName("Colossal.IO.AssetDatabase.ExecutableAsset");
+                var displayClassType = executableAssetType?.GetNestedType("<>c__DisplayClass68_0", BindingFlags.NonPublic);
+                var target = displayClassType?.GetMethod("<GetModAssets>b__2", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                var prefix = typeof(HarmonyBridge).GetMethod(nameof(SkipDynamicAssemblies), BindingFlags.NonPublic | BindingFlags.Static);
 
+                if (target == null || prefix == null)
+                {
+                    Log.Warn("ExecutableAsset.GetModAssets predicate not found; dynamic assembly filter skipped.");
+                    return;
+                }
+
+                HarmonyInstance.Patch(target, prefix: new HarmonyMethod(prefix));
+                Log.Info("Patched ExecutableAsset.GetModAssets predicate to ignore dynamic assemblies.");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to patch ExecutableAsset.GetModAssets predicate");
+            }
+        }
+
+        private static void ApplyMarketPricePostfix()
+        {
             try
             {
                 var target = typeof(EconomyUtils).GetMethod(
@@ -73,7 +69,13 @@ namespace MarketBasedEconomy.Harmony
 
                 var postfix = typeof(HarmonyBridge).GetMethod(nameof(MarketPricePostfix), BindingFlags.NonPublic | BindingFlags.Static);
 
-                if (!PatchPostfix(harmonyId, target, postfix)) return;
+                if (target == null || postfix == null)
+                {
+                    Log.Warn("Market price patch target or postfix not found; skipping.");
+                    return;
+                }
+
+                HarmonyInstance.Patch(target, postfix: new HarmonyMethod(postfix));
 
                 Log.Info("Applied market price postfix via Harmony.");
             }
@@ -83,17 +85,20 @@ namespace MarketBasedEconomy.Harmony
             }
         }
 
-        public static void ApplyWorkforceMaintenancePostfix(string harmonyId)
+        private static void ApplyWorkforceMaintenancePostfix()
         {
-            if (!Initialize()) return;
-
             try
             {
                 var target = typeof(WorkProviderSystem).GetMethod("OnUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
-
                 var postfix = typeof(HarmonyBridge).GetMethod(nameof(WorkProviderOnUpdatePostfix), BindingFlags.NonPublic | BindingFlags.Static);
 
-                if (!PatchPostfix(harmonyId, target, postfix)) return;
+                if (target == null || postfix == null)
+                {
+                    Log.Warn("Workforce maintenance patch target or postfix not found; skipping.");
+                    return;
+                }
+
+                HarmonyInstance.Patch(target, postfix: new HarmonyMethod(postfix));
 
                 Log.Info("Applied workforce maintenance postfix.");
             }
@@ -103,10 +108,8 @@ namespace MarketBasedEconomy.Harmony
             }
         }
 
-        public static void ApplyWageAdjustmentPostfix(string harmonyId)
+        private static void ApplyWageAdjustmentPostfix()
         {
-            if (!Initialize()) return;
-
             try
             {
                 var dynamicBufferType = typeof(DynamicBuffer<>).MakeGenericType(typeof(Employee));
@@ -128,14 +131,20 @@ namespace MarketBasedEconomy.Harmony
 
                 var postfix = typeof(HarmonyBridge).GetMethod(nameof(WageCalculationPostfix), BindingFlags.NonPublic | BindingFlags.Static);
 
+                if (postfix == null)
+                {
+                    Log.Warn("Wage adjustment postfix not found; skipping.");
+                    return;
+                }
+
                 if (directWageTarget != null)
                 {
-                    PatchPostfix(harmonyId, directWageTarget, postfix);
+                    HarmonyInstance.Patch(directWageTarget, postfix: new HarmonyMethod(postfix));
                 }
 
                 if (aggregateWageTarget != null)
                 {
-                    PatchPostfix(harmonyId, aggregateWageTarget, postfix);
+                    HarmonyInstance.Patch(aggregateWageTarget, postfix: new HarmonyMethod(postfix));
                 }
 
                 Log.Info("Applied wage adjustment postfix.");
@@ -146,34 +155,6 @@ namespace MarketBasedEconomy.Harmony
             }
         }
 
-        private static bool PatchPostfix(string harmonyId, MethodInfo target, MethodInfo postfix)
-        {
-            if (target == null)
-            {
-                Log.Warn("Patch target method not found; skipping.");
-                return false;
-            }
-            if (postfix == null)
-            {
-                Log.Warn("Patch postfix method not found; skipping.");
-                return false;
-            }
-
-            try
-            {
-                object harmonyInstance = Activator.CreateInstance(_harmonyType, harmonyId);
-                object harmonyMethod = Activator.CreateInstance(_harmonyMethodType, postfix);
-                _patchMethod.Invoke(harmonyInstance, new object[] { target, null, harmonyMethod, null, null, null });
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to patch target method");
-                return false;
-            }
-        }
-
-        // Signature must match Harmony’s postfix expectations: (original args..., ref float __result)
         private static void MarketPricePostfix(Resource r, ref float __result)
         {
             __result = Economy.MarketEconomyManager.Instance.AdjustMarketPrice(r, __result);
@@ -187,6 +168,22 @@ namespace MarketBasedEconomy.Harmony
         private static void WageCalculationPostfix(ref int __result)
         {
             __result = Economy.LaborMarketManager.Instance.ApplyWageMultiplier(__result);
+        }
+
+        private static bool SkipDynamicAssemblies(Assembly __0, ref bool __result)
+        {
+            if (__0 == null)
+            {
+                return true;
+            }
+
+            if (__0.IsDynamic)
+            {
+                __result = false;
+                return false;
+            }
+
+            return true;
         }
     }
 }

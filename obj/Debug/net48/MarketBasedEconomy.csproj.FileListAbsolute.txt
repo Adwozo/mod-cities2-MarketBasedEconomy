@@ -7,3 +7,5 @@ D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\bin\Debug\net48\Marke
 D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\bin\Debug\net48\MarketBasedEconomy.pdb
 D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\obj\Debug\net48\MarketBasedEconomy.dll
 D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\obj\Debug\net48\MarketBasedEconomy.pdb
+D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\bin\Debug\net48\0Harmony.dll
+D:\Andrew\workspace\game\citiesskyline2\MarketBasedEconomy\obj\Debug\net48\MarketBa.7FA7C636.Up2Date
