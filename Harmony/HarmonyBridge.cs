@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using Colossal.Logging;
+using Game.Companies;
 using Game.Economy;
 using Game.Prefabs;
 using Game.Simulation;
@@ -54,6 +55,7 @@ namespace MarketBasedEconomy.Harmony
             // Add all patches you want to apply here
             ApplyMarketPricePostfix(harmonyId);
             ApplyWorkforceMaintenancePostfix(harmonyId);
+            ApplyWageAdjustmentPostfix(harmonyId);
         }
 
         public static void ApplyMarketPricePostfix(string harmonyId)
@@ -87,10 +89,9 @@ namespace MarketBasedEconomy.Harmony
 
             try
             {
-                var target = typeof(WorkProviderSystem).GetNestedType("WorkProviderTickJob", BindingFlags.NonPublic)
-                    ?.GetMethod("UpdateNotificationAndEfficiency", BindingFlags.Instance | BindingFlags.NonPublic);
+                var target = typeof(WorkProviderSystem).GetMethod("OnUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
 
-                var postfix = typeof(HarmonyBridge).GetMethod(nameof(WorkforceMaintenancePostfix), BindingFlags.NonPublic | BindingFlags.Static);
+                var postfix = typeof(HarmonyBridge).GetMethod(nameof(WorkProviderOnUpdatePostfix), BindingFlags.NonPublic | BindingFlags.Static);
 
                 if (!PatchPostfix(harmonyId, target, postfix)) return;
 
@@ -99,6 +100,49 @@ namespace MarketBasedEconomy.Harmony
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to apply Harmony workforce maintenance postfix");
+            }
+        }
+
+        public static void ApplyWageAdjustmentPostfix(string harmonyId)
+        {
+            if (!Initialize()) return;
+
+            try
+            {
+                var dynamicBufferType = typeof(DynamicBuffer<>).MakeGenericType(typeof(Employee));
+                var econParamRef = typeof(EconomyParameterData).MakeByRefType();
+
+                var directWageTarget = typeof(EconomyUtils).GetMethod(
+                    "CalculateTotalWage",
+                    BindingFlags.Public | BindingFlags.Static,
+                    binder: null,
+                    types: new[] { dynamicBufferType, econParamRef },
+                    modifiers: null);
+
+                var aggregateWageTarget = typeof(EconomyUtils).GetMethod(
+                    "CalculateTotalWage",
+                    BindingFlags.Public | BindingFlags.Static,
+                    binder: null,
+                    types: new[] { typeof(int), typeof(WorkplaceComplexity), typeof(int), typeof(EconomyParameterData) },
+                    modifiers: null);
+
+                var postfix = typeof(HarmonyBridge).GetMethod(nameof(WageCalculationPostfix), BindingFlags.NonPublic | BindingFlags.Static);
+
+                if (directWageTarget != null)
+                {
+                    PatchPostfix(harmonyId, directWageTarget, postfix);
+                }
+
+                if (aggregateWageTarget != null)
+                {
+                    PatchPostfix(harmonyId, aggregateWageTarget, postfix);
+                }
+
+                Log.Info("Applied wage adjustment postfix.");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to apply Harmony wage adjustment postfix");
             }
         }
 
@@ -135,10 +179,14 @@ namespace MarketBasedEconomy.Harmony
             __result = Economy.MarketEconomyManager.Instance.AdjustMarketPrice(r, __result);
         }
 
-        private static void WorkforceMaintenancePostfix(int sortKey, Entity buildingEntity, DynamicBuffer<Employee> employees, Workplaces maxWorkplaces, Workplaces freeWorkplaces, ref WorkProvider workProvider, BufferLookup<Resources> __stateResources, ComponentLookup<Resources> __stateComponentResources)
+        private static void WorkProviderOnUpdatePostfix(WorkProviderSystem __instance)
         {
-            var manager = Economy.WorkforceUtilizationManager.Instance;
-            manager?.EnforceUtilizationAndMaintenance(buildingEntity, employees, maxWorkplaces, ref workProvider, __stateComponentResources, __stateResources);
+            Economy.WorkforceUtilizationManager.Instance?.ApplyPostUpdate(__instance);
+        }
+
+        private static void WageCalculationPostfix(ref int __result)
+        {
+            __result = Economy.LaborMarketManager.Instance.ApplyWageMultiplier(__result);
         }
     }
 }

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MarketBasedEconomy")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2a83dfd89deabb940467ff5d38f401df739d80fd")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4c5f2a4068db890918a9e55eb7cb9ca5ebdc1a4b")]
 [assembly: System.Reflection.AssemblyProductAttribute("MarketBasedEconomy")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MarketBasedEconomy")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

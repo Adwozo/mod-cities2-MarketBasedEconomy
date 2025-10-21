@@ -6,12 +6,14 @@ using Game.Modding;
 using Game.Settings;
 using Game.UI;
 using Game.UI.Widgets;
+using MarketBasedEconomy.Economy;
+using Unity.Mathematics;
 
 namespace MarketBasedEconomy
 {
     [FileLocation(nameof(MarketBasedEconomy))]
-    [SettingsUIGroupOrder(kButtonGroup, kToggleGroup, kSliderGroup, kDropdownGroup, kKeybindingGroup)]
-    [SettingsUIShowGroupName(kButtonGroup, kToggleGroup, kSliderGroup, kDropdownGroup, kKeybindingGroup)]
+    [SettingsUIGroupOrder(kEconomyGroup, kButtonGroup, kToggleGroup, kSliderGroup, kDropdownGroup, kKeybindingGroup)]
+    [SettingsUIShowGroupName(kEconomyGroup, kButtonGroup, kToggleGroup, kDropdownGroup, kKeybindingGroup)]
     [SettingsUIKeyboardAction(Mod.kVectorActionName, ActionType.Vector2, usages: new string[] { Usages.kMenuUsage, "TestUsage" }, interactions: new string[] { "UIButton" }, processors: new string[] { "ScaleVector2(x=100,y=100)" })]
     [SettingsUIKeyboardAction(Mod.kAxisActionName, ActionType.Axis, usages: new string[] { Usages.kMenuUsage, "TestUsage" }, interactions: new string[] { "UIButton" })]
     [SettingsUIKeyboardAction(Mod.kButtonActionName, ActionType.Button, usages: new string[] { Usages.kMenuUsage, "TestUsage" }, interactions: new string[] { "UIButton" })]
@@ -21,7 +23,79 @@ namespace MarketBasedEconomy
     {
         public const string kSection = "Main";
 
+        public const string kEconomyGroup = "Economy";
         public const string kButtonGroup = "Button";
+        [SettingsUISlider(min = 0f, max = 1f, step = 0.05f)]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public float ExternalMarketWeight
+        {
+            get => MarketEconomyManager.Instance.ExternalPriceInfluence;
+            set => MarketEconomyManager.Instance.ExternalPriceInfluence = math.clamp(value, 0f, 1f);
+        }
+
+        [SettingsUISlider(min = 0.1f, max = 0.75f, step = 0.05f)]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public float MinimumUtilizationShare
+        {
+            get => WorkforceUtilizationManager.Instance.MinimumUtilizationShare;
+            set => WorkforceUtilizationManager.Instance.MinimumUtilizationShare = math.clamp(value, 0.05f, 0.95f);
+        }
+
+        [SettingsUISlider(min = 0f, max = 200f, step = 5f)]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public float BaseMaintenancePerDay
+        {
+            get => WorkforceUtilizationManager.Instance.BaseMaintenancePerDay;
+            set => WorkforceUtilizationManager.Instance.BaseMaintenancePerDay = math.max(0f, value);
+        }
+
+        [SettingsUISlider(min = 0f, max = 10f, step = 0.25f)]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public float MaintenancePerCapacity
+        {
+            get => WorkforceUtilizationManager.Instance.MaintenancePerCapacity;
+            set => WorkforceUtilizationManager.Instance.MaintenancePerCapacity = math.max(0f, value);
+        }
+
+        [SettingsUISlider(min = 0f, max = 5f, step = 0.1f)]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public float MaintenanceCostMultiplier
+        {
+            get => WorkforceUtilizationManager.Instance.MaintenanceCostMultiplier;
+            set => WorkforceUtilizationManager.Instance.MaintenanceCostMultiplier = math.max(0f, value);
+        }
+
+        [SettingsUISlider(min = 1f, max = 3f, step = 0.1f)]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public float UnderUtilizationPenalty
+        {
+            get => WorkforceUtilizationManager.Instance.UnderUtilizationPenaltyMultiplier;
+            set => WorkforceUtilizationManager.Instance.UnderUtilizationPenaltyMultiplier = math.max(1f, value);
+        }
+
+        [SettingsUISlider(min = 50f, max = 500f, step = 10f)]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public float MaintenanceFeeThreshold
+        {
+            get => WorkforceUtilizationManager.Instance.MaintenanceFeeThreshold;
+            set => WorkforceUtilizationManager.Instance.MaintenanceFeeThreshold = math.max(10f, value);
+        }
+
+        [SettingsUISlider(min = 0f, max = 1f, step = 0.05f)]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public float UnemploymentWagePenalty
+        {
+            get => LaborMarketManager.Instance.UnemploymentWagePenalty;
+            set => LaborMarketManager.Instance.UnemploymentWagePenalty = math.max(0f, value);
+        }
+
+        [SettingsUISlider(min = 0f, max = 1.5f, step = 0.05f)]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public float SkillShortagePremium
+        {
+            get => LaborMarketManager.Instance.SkillShortagePremium;
+            set => LaborMarketManager.Instance.SkillShortagePremium = math.max(0f, value);
+        }
         public const string kToggleGroup = "Toggle";
         public const string kSliderGroup = "Slider";
         public const string kDropdownGroup = "Dropdown";
@@ -102,25 +176,25 @@ namespace MarketBasedEconomy
         }
 
 
-        public DropdownItem<int>[] GetIntDropdownItems()
-        {
-            var items = new List<DropdownItem<int>>();
-
-            for (var i = 0; i < 3; i += 1)
-            {
-                items.Add(new DropdownItem<int>()
-                {
-                    value = i,
-                    displayName = i.ToString(),
-                });
-            }
-
-            return items.ToArray();
-        }
-
         public override void SetDefaults()
         {
-            throw new System.NotImplementedException();
+            var marketManager = MarketEconomyManager.Instance;
+            marketManager.MinimumPriceMultiplier = 0.5f;
+            marketManager.MaximumPriceMultiplier = 2.5f;
+            marketManager.Sensitivity = 0.65f;
+            marketManager.ExternalPriceInfluence = 0.35f;
+
+            var workforceManager = WorkforceUtilizationManager.Instance;
+            workforceManager.MinimumUtilizationShare = 0.25f;
+            workforceManager.BaseMaintenancePerDay = 45f;
+            workforceManager.MaintenancePerCapacity = 3.5f;
+            workforceManager.UnderUtilizationPenaltyMultiplier = 2.0f;
+            workforceManager.MaintenanceFeeThreshold = 200f;
+            workforceManager.MaintenanceCostMultiplier = 1f;
+
+            var laborManager = LaborMarketManager.Instance;
+            laborManager.UnemploymentWagePenalty = 0.6f;
+            laborManager.SkillShortagePremium = 0.8f;
         }
 
         public enum SomeEnum
@@ -145,11 +219,40 @@ namespace MarketBasedEconomy
                 { m_Setting.GetSettingsLocaleID(), "MarketBasedEconomy" },
                 { m_Setting.GetOptionTabLocaleID(Setting.kSection), "Main" },
 
+                { m_Setting.GetOptionGroupLocaleID(Setting.kEconomyGroup), "Economy" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kButtonGroup), "Buttons" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kToggleGroup), "Toggle" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kSliderGroup), "Sliders" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kDropdownGroup), "Dropdowns" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kKeybindingGroup), "Key bindings" },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ExternalMarketWeight)), "External market weight" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ExternalMarketWeight)), "Blend factor between local supply-demand price and external trade price references." },
+
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MinimumUtilizationShare)), "Minimum utilization" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MinimumUtilizationShare)), "Minimum staffed fraction required before companies can expand their workforce." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.BaseMaintenancePerDay)), "Base maintenance per day" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.BaseMaintenancePerDay)), "Baseline upkeep cost charged to office and industrial companies each day." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MaintenancePerCapacity)), "Maintenance per capacity" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MaintenancePerCapacity)), "Additional upkeep cost per worker slot available in the building." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.UnderUtilizationPenalty)), "Under-utilization penalty" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.UnderUtilizationPenalty)), "Multiplier applied to maintenance when utilization falls below the minimum share." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MaintenanceFeeThreshold)), "Maintenance fee threshold" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MaintenanceFeeThreshold)), "Accumulated upkeep amount required before deducting money from the company." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MaintenanceCostMultiplier)), "Maintenance cost multiplier" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MaintenanceCostMultiplier)), "Scales all maintenance charges for office and industrial companies." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.UnemploymentWagePenalty)), "Unemployment wage penalty" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.UnemploymentWagePenalty)), "Wage reduction factor applied when unemployment rises." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.SkillShortagePremium)), "Skill shortage wage premium" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.SkillShortagePremium)), "Wage increase factor applied when few skilled workers are available." },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Button)), "Button" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Button)), $"Simple single button. It should be bool property with only setter or use [{nameof(SettingsUIButtonAttribute)}] to make button from bool property with setter and getter" },
