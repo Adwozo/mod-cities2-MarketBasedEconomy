@@ -1,5 +1,4 @@
 using System;
-using System.Reflection;
 using Colossal.Logging;
 using Game.Companies;
 using Game.Economy;
@@ -23,7 +22,6 @@ namespace MarketBasedEconomy.Harmony
                 return;
             }
 
-            ApplyExecutableAssetFilterPatch();
             HarmonyInstance.PatchAll(typeof(HarmonyBridge).Assembly);
             ApplyMarketPricePostfix();
             ApplyWorkforceMaintenancePostfix();
@@ -32,42 +30,16 @@ namespace MarketBasedEconomy.Harmony
             _patchesApplied = true;
         }
 
-        private static void ApplyExecutableAssetFilterPatch()
-        {
-            try
-            {
-                var executableAssetType = AccessTools.TypeByName("Colossal.IO.AssetDatabase.ExecutableAsset");
-                var displayClassType = executableAssetType?.GetNestedType("<>c__DisplayClass68_0", BindingFlags.NonPublic);
-                var target = displayClassType?.GetMethod("<GetModAssets>b__2", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                var prefix = typeof(HarmonyBridge).GetMethod(nameof(SkipDynamicAssemblies), BindingFlags.NonPublic | BindingFlags.Static);
-
-                if (target == null || prefix == null)
-                {
-                    Log.Warn("ExecutableAsset.GetModAssets predicate not found; dynamic assembly filter skipped.");
-                    return;
-                }
-
-                HarmonyInstance.Patch(target, prefix: new HarmonyMethod(prefix));
-                Log.Info("Patched ExecutableAsset.GetModAssets predicate to ignore dynamic assemblies.");
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to patch ExecutableAsset.GetModAssets predicate");
-            }
-        }
-
         private static void ApplyMarketPricePostfix()
         {
             try
             {
-                var target = typeof(EconomyUtils).GetMethod(
+                var target = AccessTools.Method(
+                    typeof(EconomyUtils),
                     nameof(EconomyUtils.GetMarketPrice),
-                    BindingFlags.Public | BindingFlags.Static,
-                    binder: null,
-                    types: new[] { typeof(Resource), typeof(ResourcePrefabs), typeof(ComponentLookup<ResourceData>).MakeByRefType() },
-                    modifiers: null);
+                    new[] { typeof(Resource), typeof(ResourcePrefabs), typeof(ComponentLookup<ResourceData>).MakeByRefType() });
 
-                var postfix = typeof(HarmonyBridge).GetMethod(nameof(MarketPricePostfix), BindingFlags.NonPublic | BindingFlags.Static);
+                var postfix = AccessTools.Method(typeof(HarmonyBridge), nameof(MarketPricePostfix));
 
                 if (target == null || postfix == null)
                 {
@@ -89,8 +61,8 @@ namespace MarketBasedEconomy.Harmony
         {
             try
             {
-                var target = typeof(WorkProviderSystem).GetMethod("OnUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
-                var postfix = typeof(HarmonyBridge).GetMethod(nameof(WorkProviderOnUpdatePostfix), BindingFlags.NonPublic | BindingFlags.Static);
+                var target = AccessTools.Method(typeof(WorkProviderSystem), "OnUpdate");
+                var postfix = AccessTools.Method(typeof(HarmonyBridge), nameof(WorkProviderOnUpdatePostfix));
 
                 if (target == null || postfix == null)
                 {
@@ -115,21 +87,17 @@ namespace MarketBasedEconomy.Harmony
                 var dynamicBufferType = typeof(DynamicBuffer<>).MakeGenericType(typeof(Employee));
                 var econParamRef = typeof(EconomyParameterData).MakeByRefType();
 
-                var directWageTarget = typeof(EconomyUtils).GetMethod(
+                var directWageTarget = AccessTools.Method(
+                    typeof(EconomyUtils),
                     "CalculateTotalWage",
-                    BindingFlags.Public | BindingFlags.Static,
-                    binder: null,
-                    types: new[] { dynamicBufferType, econParamRef },
-                    modifiers: null);
+                    new[] { dynamicBufferType, econParamRef });
 
-                var aggregateWageTarget = typeof(EconomyUtils).GetMethod(
+                var aggregateWageTarget = AccessTools.Method(
+                    typeof(EconomyUtils),
                     "CalculateTotalWage",
-                    BindingFlags.Public | BindingFlags.Static,
-                    binder: null,
-                    types: new[] { typeof(int), typeof(WorkplaceComplexity), typeof(int), typeof(EconomyParameterData) },
-                    modifiers: null);
+                    new[] { typeof(int), typeof(WorkplaceComplexity), typeof(int), typeof(EconomyParameterData) });
 
-                var postfix = typeof(HarmonyBridge).GetMethod(nameof(WageCalculationPostfix), BindingFlags.NonPublic | BindingFlags.Static);
+                var postfix = AccessTools.Method(typeof(HarmonyBridge), nameof(WageCalculationPostfix));
 
                 if (postfix == null)
                 {
@@ -168,22 +136,6 @@ namespace MarketBasedEconomy.Harmony
         private static void WageCalculationPostfix(ref int __result)
         {
             __result = Economy.LaborMarketManager.Instance.ApplyWageMultiplier(__result);
-        }
-
-        private static bool SkipDynamicAssemblies(Assembly __0, ref bool __result)
-        {
-            if (__0 == null)
-            {
-                return true;
-            }
-
-            if (__0.IsDynamic)
-            {
-                __result = false;
-                return false;
-            }
-
-            return true;
         }
     }
 }

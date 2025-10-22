@@ -13,10 +13,16 @@
 - **Diagnostics toggle**: Optional logging to help modders tune parameters and troubleshoot behavior.
 
 ### Installation
-1. Download or build the latest `MarketBasedEconomy_win_x86_64.dll` (and other platform binaries if required) from `bin/Debug/net48/`.
-2. Copy the DLL (and any dependent files) into your Cities: Skylines II `Mods` directory (`%LOCALAPPDATA%/Colossal Order/Cities Skylines II/Mods/MarketBasedEconomy/` on Windows).
-3. Ensure the `lib/0Harmony.dll` dependency is placed alongside the mod or already supplied by another mod manager.
-4. Launch Cities: Skylines II and enable **Market-Based Economy** in the in-game content manager.
+1. Build the solution via `dotnet build MarketBasedEconomy.sln -c Release` (or `Debug` while testing). The toolchain now produces both the main mod and the `Bootstrap` helper assemblies.
+2. Locate the compiled outputs:
+   - Main mod: `bin/<Configuration>/net48/`
+   - Bootstrap helper: `Bootstrap/bin/<Configuration>/net48/`
+3. Create (or update) two directories inside the game `Mods` folder (`%LOCALAPPDATA%/Colossal Order/Cities Skylines II/Mods/` on Windows):
+   - `MarketBasedEconomy`
+   - `MarketBasedEconomy.Bootstrap`
+4. Copy the platform-specific bundles/DLLs from each build output into the matching directory. The bootstrap files must stay separate from the main mod so the game loads them as two entries.
+5. Ensure `lib/0Harmony.dll` sits alongside the **main** mod binaries; the bootstrap uses only game-provided assemblies.
+6. Launch Cities: Skylines II and enable both **Market-Based Economy** and **Market-Based Economy Bootstrap** in the content manager.
 
 ### In-Game Setup
 - Open **Options → Mods → Market-Based Economy** to configure sliders and toggles provided by the mod.
@@ -31,6 +37,8 @@
 ### Troubleshooting
 - If prices appear stuck, disable diagnostics logging, exit to desktop, delete the generated log, then re-enable logging and retry.
 - Conflicts may occur with other mods that fully replace pricing or labor systems. Try disabling overlapping mods if you encounter issues.
+- Build failures complaining about missing `Colossal.*` or `UnityEngine.*` assemblies usually mean the CS2 mod toolchain paths aren’t configured. Re-open the in-game Modding Tools panel to refresh `CSII_*` environment variables and rebuild.
+- Duplicate `TargetFrameworkAttribute` errors indicate another project or tool emits its own assembly info; ensure you’re building from a clean tree so the main mod and bootstrap projects stay separate.
 
 ### Contribution & Support
 - Issues and pull requests welcome. Provide steps to reproduce along with diagnostic logs if possible.
