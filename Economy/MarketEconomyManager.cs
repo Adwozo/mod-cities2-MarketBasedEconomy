@@ -44,6 +44,23 @@ namespace MarketBasedEconomy.Economy
         public float ExternalPriceInfluence { get; set; } = 0.35f;
 
         /// <summary>
+        /// Extra multiplier applied to the industrial (production) portion of the price once the market multiplier is computed.
+        /// </summary>
+        public float IndustrialComponentBias { get; set; } = 1f;
+
+        /// <summary>
+        /// Extra multiplier applied to the service (retail) portion of the price once the market multiplier is computed.
+        /// </summary>
+        public float ServiceComponentBias { get; set; } = 1f;
+
+        public enum PriceComponent
+        {
+            Market,
+            Industrial,
+            Service
+        }
+
+        /// <summary>
         /// Clears cached references so the next request resolves fresh systems.
         /// </summary>
         public void ResetCaches()
@@ -54,17 +71,23 @@ namespace MarketBasedEconomy.Economy
         /// <summary>
         /// Returns a new price based on supply-demand information. Falls back to vanilla price when insufficient data is available.
         /// </summary>
-        public float AdjustMarketPrice(Resource resource, float vanillaPrice)
+        public float AdjustMarketPrice(Resource resource, float vanillaPrice, bool skipLogging = false)
         {
             if (vanillaPrice <= 0f || resource == Resource.NoResource)
             {
-                Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust skipped for {resource}: vanilla={vanillaPrice:F2}.");
+                if (!skipLogging)
+                {
+                    Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust skipped for {resource}: vanilla={vanillaPrice:F2}.");
+                }
                 return vanillaPrice;
             }
 
             if (!TryGetSnapshot(resource, out var snapshot))
             {
-                Diagnostics.DiagnosticsLogger.Log("Economy", $"No market snapshot for {resource}; using vanilla price {vanillaPrice:F2}.");
+                if (!skipLogging)
+                {
+                    Diagnostics.DiagnosticsLogger.Log("Economy", $"No market snapshot for {resource}; using vanilla price {vanillaPrice:F2}.");
+                }
                 return vanillaPrice;
             }
 
@@ -89,9 +112,66 @@ namespace MarketBasedEconomy.Economy
             float maxPrice = vanillaPrice * MaximumPriceMultiplier;
             float clampedPrice = math.clamp(price, minPrice, maxPrice);
 
-            Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust {resource}: vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, ratio={ratio:F2}, multiplier={multiplier:F2}, externalBlend={externalBlend:F2}, externalPrice={externalPrice:F2}, result={price:F2}, clamped={clampedPrice:F2}");
+            if (!skipLogging)
+            {
+                Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust {resource}: vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, ratio={ratio:F2}, multiplier={multiplier:F2}, externalBlend={externalBlend:F2}, externalPrice={externalPrice:F2}, result={price:F2}, clamped={clampedPrice:F2}");
+            }
 
             return clampedPrice;
+        }
+
+        /// <summary>
+        /// Adjusts a specific price component (industrial or service) based on the market multiplier and component bias.
+        /// </summary>
+        public float AdjustPriceComponent(Resource resource, float industrialComponent, float serviceComponent, PriceComponent component, bool skipLogging = false)
+        {
+            float sanitizedIndustrial = math.max(0f, industrialComponent);
+            float sanitizedService = math.max(0f, serviceComponent);
+            float vanillaTotal = sanitizedIndustrial + sanitizedService;
+
+            if (vanillaTotal <= 0f)
+            {
+                float fallback = component switch
+                {
+                    PriceComponent.Industrial => sanitizedIndustrial,
+                    PriceComponent.Service => sanitizedService,
+                    _ => 0f
+                };
+
+                if (!skipLogging)
+                {
+                    Diagnostics.DiagnosticsLogger.Log(
+                        "Economy",
+                        $"AdjustPriceComponent {component} for {resource}: vanillaTotal<=0, industrial={sanitizedIndustrial:F2}, service={sanitizedService:F2}, returning {fallback:F2}");
+                }
+
+                return fallback;
+            }
+
+            float adjustedTotal = AdjustMarketPrice(resource, vanillaTotal, skipLogging: true);
+            float multiplier = vanillaTotal > 0f ? math.max(0f, adjustedTotal / vanillaTotal) : 1f;
+
+            float industrialBias = math.max(0f, IndustrialComponentBias);
+            float serviceBias = math.max(0f, ServiceComponentBias);
+
+            float industrialAdjusted = math.max(0f, sanitizedIndustrial * multiplier * industrialBias);
+            float serviceAdjusted = math.max(0f, sanitizedService * multiplier * serviceBias);
+
+            float result = component switch
+            {
+                PriceComponent.Industrial => industrialAdjusted,
+                PriceComponent.Service => serviceAdjusted,
+                _ => adjustedTotal
+            };
+
+            if (!skipLogging)
+            {
+                Diagnostics.DiagnosticsLogger.Log(
+                    "Economy",
+                    $"AdjustPriceComponent {component} for {resource}: vanillaTotal={vanillaTotal:F2}, multiplier={multiplier:F3}, biases=({industrialBias:F2},{serviceBias:F2}), industrial={sanitizedIndustrial:F2}->{industrialAdjusted:F2}, service={sanitizedService:F2}->{serviceAdjusted:F2}, result={result:F2}");
+            }
+
+            return result;
         }
 
         /// <summary>

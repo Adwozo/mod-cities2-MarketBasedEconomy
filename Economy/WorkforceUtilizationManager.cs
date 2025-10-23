@@ -28,7 +28,9 @@ namespace MarketBasedEconomy.Economy
 
         public static WorkforceUtilizationManager Instance => s_Instance.Value;
 
-        public float MinimumUtilizationShare { get; set; } = 0.25f;
+        public float
+        MinimumUtilizationShare
+        { get; set; } = 0.25f;
 
         public void ApplyPostUpdate(WorkProviderSystem system)
         {
@@ -76,11 +78,8 @@ namespace MarketBasedEconomy.Economy
 
                 if (!employeesLookup.HasBuffer(entity))
                 {
-                    Diagnostics.DiagnosticsLogger.Log("Workforce", $"Entity {entity.Index} has no employee buffer; skipping utilization check.");
                     continue;
                 }
-
-                Diagnostics.DiagnosticsLogger.Log("Workforce", $"Processing entity {entity.Index}: currentMaxWorkers={provider.m_MaxWorkers}");
 
                 int minimumCompanyWorkers = ComputeMinimumCompanyWorkers(
                     entity,
@@ -94,26 +93,12 @@ namespace MarketBasedEconomy.Economy
                 ApplyUtilization(entity, employeesLookup[entity], ref provider, minimumCompanyWorkers);
 
                 commandBuffer.SetComponent(entity, provider);
-                Diagnostics.DiagnosticsLogger.Log("Workforce", $"Updated WorkProvider for entity {entity.Index}: newMaxWorkers={provider.m_MaxWorkers}");
+                //Diagnostics.DiagnosticsLogger.Log("Workforce", $"Updated WorkProvider for entity {entity.Index}: newMaxWorkers={provider.m_MaxWorkers}");
             }
         }
 
         private void ApplyUtilization(Entity workplaceEntity, DynamicBuffer<Employee> employees, ref WorkProvider workProvider, int minimumCompanyWorkers)
         {
-            int maxCapacity = math.max(1, workProvider.m_MaxWorkers);
-            int staffed = employees.Length;
-            float utilization = staffed / (float)maxCapacity;
-
-            Diagnostics.DiagnosticsLogger.Log("Workforce", $"Entity {workplaceEntity.Index} utilization: staffed={staffed}, capacity={maxCapacity}, utilization={utilization:P1}");
-
-            float minShare = math.clamp(MinimumUtilizationShare, 0.05f, 0.95f);
-            if (utilization < minShare && workProvider.m_MaxWorkers > 0)
-            {
-                int target = math.max((int)math.ceil(minShare * maxCapacity), 1);
-                Diagnostics.DiagnosticsLogger.Log("Workforce", $"Utilization low for {workplaceEntity.Index}: staffed={staffed} capacity={maxCapacity} reducing maxWorkers to {target}");
-                workProvider.m_MaxWorkers = math.min(workProvider.m_MaxWorkers, target);
-            }
-
             if (minimumCompanyWorkers > 0 && workProvider.m_MaxWorkers < minimumCompanyWorkers)
             {
                 Diagnostics.DiagnosticsLogger.Log(
