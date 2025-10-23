@@ -58,13 +58,13 @@ namespace MarketBasedEconomy.Economy
         {
             if (vanillaPrice <= 0f || resource == Resource.NoResource)
             {
-                Diagnostics.DiagnosticsLogger.Log($"Price adjust skipped for {resource}: vanilla={vanillaPrice:F2}.");
+                Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust skipped for {resource}: vanilla={vanillaPrice:F2}.");
                 return vanillaPrice;
             }
 
             if (!TryGetSnapshot(resource, out var snapshot))
             {
-                Diagnostics.DiagnosticsLogger.Log($"No market snapshot for {resource}; using vanilla price {vanillaPrice:F2}.");
+                Diagnostics.DiagnosticsLogger.Log("Economy", $"No market snapshot for {resource}; using vanilla price {vanillaPrice:F2}.");
                 return vanillaPrice;
             }
 
@@ -89,7 +89,7 @@ namespace MarketBasedEconomy.Economy
             float maxPrice = vanillaPrice * MaximumPriceMultiplier;
             float clampedPrice = math.clamp(price, minPrice, maxPrice);
 
-            Diagnostics.DiagnosticsLogger.Log($"Price adjust {resource}: vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, ratio={ratio:F2}, multiplier={multiplier:F2}, externalBlend={externalBlend:F2}, externalPrice={externalPrice:F2}, result={price:F2}, clamped={clampedPrice:F2}");
+            Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust {resource}: vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, ratio={ratio:F2}, multiplier={multiplier:F2}, externalBlend={externalBlend:F2}, externalPrice={externalPrice:F2}, result={price:F2}, clamped={clampedPrice:F2}");
 
             return clampedPrice;
         }
@@ -129,6 +129,7 @@ namespace MarketBasedEconomy.Economy
                 };
 
                 Diagnostics.DiagnosticsLogger.Log(
+                    "Economy",
                     $"Snapshot {resource}: supply={snapshot.Supply:F1}, demand={snapshot.Demand:F1}, processingWorkers=({processingWorkers.x}/{processingWorkers.y}), serviceWorkers=({serviceWorkers.x}/{serviceWorkers.y}), processingCompanies={processingCompanies}, serviceCompanies={serviceCompanies}, tradeBalance={tradeBalance}, tradeWorth={tradeWorth}");
 
                 return true;

@@ -26,14 +26,14 @@ namespace MarketBasedEconomy.Economy
         {
             if (currentWage <= 0)
             {
-                Diagnostics.DiagnosticsLogger.Log($"Wage adjust skipped: base wage {currentWage} <= 0.");
+                Diagnostics.DiagnosticsLogger.Log("Labor", $"Wage adjust skipped: base wage {currentWage} <= 0.");
                 return currentWage;
             }
 
             var householdSystem = GetHouseholdDataSystem();
             if (householdSystem == null)
             {
-                Diagnostics.DiagnosticsLogger.Log("Household system unavailable; using vanilla wage.");
+                Diagnostics.DiagnosticsLogger.Log("Labor", "Household system unavailable; using vanilla wage.");
                 return currentWage;
             }
 
@@ -58,6 +58,7 @@ namespace MarketBasedEconomy.Economy
                 int adjusted = (int)math.max(1f, currentWage * wageMultiplier);
 
                 Diagnostics.DiagnosticsLogger.Log(
+                    "Labor",
                     $"Wage adjust: workforce={workforce}, employed={employed}, unemployment={unemploymentRate:P1}, skilledShare={skilledShare:P1}, penalty={penalty:F2}, premium={premium:F2}, multiplier={wageMultiplier:F2}, base={currentWage}, adjusted={adjusted}");
 
                 return adjusted;
@@ -65,7 +66,7 @@ namespace MarketBasedEconomy.Economy
             catch (Exception ex)
             {
                 m_Log.Warn(ex, "Failed to adjust wage with labor market data.");
-                Diagnostics.DiagnosticsLogger.Log($"Wage adjust exception: {ex.Message}");
+                Diagnostics.DiagnosticsLogger.Log("Labor", $"Wage adjust exception: {ex.Message}");
                 return currentWage;
             }
         }

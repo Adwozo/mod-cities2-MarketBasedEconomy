@@ -9,6 +9,7 @@ namespace MarketBasedEconomy.Diagnostics
         private static readonly object s_Lock = new();
         private static string s_LogFilePath;
         private static bool s_Initialized;
+        private const string Prefix = "---MBE";
 
         public static bool Enabled { get; set; }
 
@@ -35,16 +36,23 @@ namespace MarketBasedEconomy.Diagnostics
 
         public static void Log(string message)
         {
+            Log(null, message);
+        }
+
+        public static void Log(string category, string message)
+        {
             if (!Enabled || !s_Initialized)
             {
                 return;
             }
 
+            string categoryLabel = string.IsNullOrWhiteSpace(category) ? "General" : category;
+
             try
             {
                 lock (s_Lock)
                 {
-                    File.AppendAllText(s_LogFilePath, $"[{DateTime.Now:O}] {message}{Environment.NewLine}");
+                    File.AppendAllText(s_LogFilePath, $"[{DateTime.Now:O}] {Prefix} {categoryLabel} {message}{Environment.NewLine}");
                 }
             }
             catch (Exception ex)

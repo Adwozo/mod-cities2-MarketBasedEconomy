@@ -55,46 +55,6 @@ namespace MarketBasedEconomy
             set => WorkforceUtilizationManager.Instance.MinimumUtilizationShare = math.clamp(value, 0.05f, 0.95f);
         }
 
-        [SettingsUISlider(min = 0f, max = 200f, step = 5f)]
-        [SettingsUISection(kSection, kEconomyGroup)]
-        public float BaseMaintenancePerDay
-        {
-            get => WorkforceUtilizationManager.Instance.BaseMaintenancePerDay;
-            set => WorkforceUtilizationManager.Instance.BaseMaintenancePerDay = math.max(0f, value);
-        }
-
-        [SettingsUISlider(min = 0f, max = 10f, step = 0.25f)]
-        [SettingsUISection(kSection, kEconomyGroup)]
-        public float MaintenancePerCapacity
-        {
-            get => WorkforceUtilizationManager.Instance.MaintenancePerCapacity;
-            set => WorkforceUtilizationManager.Instance.MaintenancePerCapacity = math.max(0f, value);
-        }
-
-        [SettingsUISlider(min = 0f, max = 5f, step = 0.1f)]
-        [SettingsUISection(kSection, kEconomyGroup)]
-        public float MaintenanceCostMultiplier
-        {
-            get => WorkforceUtilizationManager.Instance.MaintenanceCostMultiplier;
-            set => WorkforceUtilizationManager.Instance.MaintenanceCostMultiplier = math.max(0f, value);
-        }
-
-        [SettingsUISlider(min = 1f, max = 3f, step = 0.1f)]
-        [SettingsUISection(kSection, kEconomyGroup)]
-        public float UnderUtilizationPenalty
-        {
-            get => WorkforceUtilizationManager.Instance.UnderUtilizationPenaltyMultiplier;
-            set => WorkforceUtilizationManager.Instance.UnderUtilizationPenaltyMultiplier = math.max(1f, value);
-        }
-
-        [SettingsUISlider(min = 50f, max = 500f, step = 10f)]
-        [SettingsUISection(kSection, kEconomyGroup)]
-        public float MaintenanceFeeThreshold
-        {
-            get => WorkforceUtilizationManager.Instance.MaintenanceFeeThreshold;
-            set => WorkforceUtilizationManager.Instance.MaintenanceFeeThreshold = math.max(10f, value);
-        }
-
         [SettingsUISlider(min = 0f, max = 1f, step = 0.05f)]
         [SettingsUISection(kSection, kEconomyGroup)]
         public float UnemploymentWagePenalty
@@ -212,11 +172,6 @@ namespace MarketBasedEconomy
 
             var workforceManager = WorkforceUtilizationManager.Instance;
             workforceManager.MinimumUtilizationShare = 0.25f;
-            workforceManager.BaseMaintenancePerDay = 45f;
-            workforceManager.MaintenancePerCapacity = 3.5f;
-            workforceManager.UnderUtilizationPenaltyMultiplier = 2.0f;
-            workforceManager.MaintenanceFeeThreshold = 200f;
-            workforceManager.MaintenanceCostMultiplier = 1f;
 
             var laborManager = LaborMarketManager.Instance;
             laborManager.UnemploymentWagePenalty = 0.6f;
@@ -260,21 +215,6 @@ namespace MarketBasedEconomy
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MinimumUtilizationShare)), "Minimum utilization" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.MinimumUtilizationShare)), "Minimum staffed fraction required before companies can expand their workforce." },
-
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.BaseMaintenancePerDay)), "Base maintenance per day" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.BaseMaintenancePerDay)), "Baseline upkeep cost charged to office and industrial companies each day." },
-
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MaintenancePerCapacity)), "Maintenance per capacity" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MaintenancePerCapacity)), "Additional upkeep cost per worker slot available in the building." },
-
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.UnderUtilizationPenalty)), "Under-utilization penalty" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.UnderUtilizationPenalty)), "Multiplier applied to maintenance when utilization falls below the minimum share." },
-
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MaintenanceFeeThreshold)), "Maintenance fee threshold" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MaintenanceFeeThreshold)), "Accumulated upkeep amount required before deducting money from the company." },
-
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MaintenanceCostMultiplier)), "Maintenance cost multiplier" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MaintenanceCostMultiplier)), "Scales all maintenance charges for office and industrial companies." },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.UnemploymentWagePenalty)), "Unemployment wage penalty" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.UnemploymentWagePenalty)), "Wage reduction factor applied when unemployment rises." },
