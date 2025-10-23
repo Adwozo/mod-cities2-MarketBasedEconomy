@@ -33,7 +33,7 @@ namespace MarketBasedEconomy.Economy
             var chunks = m_EconomyParameterQuery.ToArchetypeChunkArray(Allocator.TempJob);
             foreach (var chunk in chunks)
             {
-                var dataArray = chunk.GetNativeArray(economyParamType);
+                var dataArray = chunk.GetNativeArray(ref economyParamType);
                 for (int i = 0; i < dataArray.Length; i++)
                 {
                     var data = dataArray[i];

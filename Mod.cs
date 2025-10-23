@@ -31,6 +31,7 @@ namespace MarketBasedEconomy
 
             LaborMarketManager.Instance.Reset();
             updateSystem.UpdateBefore<WageAdjustmentSystem, PayWageSystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateBefore<ZeroWeightProductSystem, ResourceExporterSystem>(SystemUpdatePhase.GameSimulation);
 
             HarmonyBridge.ApplyAll(HarmonyId);
         }
