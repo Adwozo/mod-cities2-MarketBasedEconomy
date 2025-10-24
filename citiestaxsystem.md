@@ -28,6 +28,7 @@
    - `TaxSystem.OnUpdate` pulls current tax parameters, gathers resource metadata, and schedules `PayTaxJob` for each payer group.
    - `PayTaxJob` computes `tax = round(0.01 * averageRate * untaxedIncome)`, scales it by the area multiplier, subtracts it, sends statistics events, then zeroes `m_UntaxedIncome`.
    - Industrial payers whose prefab output resource has zero weight are recategorized as office income so the UI/budget align with intangible services.
+   - **Mod tweak:** A post-processing system recomputes commercial, industrial, and extractor `TaxPayer` values using profit (= vanilla profit per tick minus rent per tick). The system replaces the vanilla untaxed income delta and recomputes the blended average tax rate so taxation reflects profit rather than raw revenue.
 3. **Statistics + UI**
    - `CityStatisticsSystem` receives the queued events and persists aggregated taxable income figures per category/resource index.
    - `TaxationUISystem` calls the `ITaxSystem` interface to expose current rates, legal ranges, resource lists, and estimated income/effects.
@@ -43,6 +44,7 @@
 ## 5. Mod Integration Ideas
 - **Custom progression**: Patch `TaxSystem.SetTaxRate`/`SetResidentialTaxRate` to route through your own logic (e.g. dynamic caps, non-linear adjustments) before falling back to the vanilla clamp logic.
 - **Alternative tax formulas**: Override `TaxSystem.GetTax` or `PayTaxJob.PayTax` to introduce brackets, deductions, or progressive multipliers. Remember to update statistics so UI/budgets remain consistent.
+- **Profit-based corporate taxation (implemented)**: `CompanyProfitAdjustmentSystem` recalculates company untaxed income each tick as `(profitPerDay / kCompanyUpdatesPerDay) - (rent / PropertyRenterSystem.kUpdatesPerDay)` and clamps negative values. Use this as a template for more elaborate profit adjustments (e.g. maintenance, loan interest).
 - **Additional statistics**: After collecting taxes, queue your own `StatisticsEvent` entries if the mod tracks new income categories. Use the same `CityStatisticsSystem` queue obtained from `GetStatisticsEventQueue`.
 - **UI synchronization**: If you add new taxable areas/resources, extend `TaxationUISystem` bindings (or mirror its logic) so the front-end reflects your additions. The UI expects the arrays/ranges described above.
 - **Runtime clamp updates**: Inject a system that mutates `TaxParameterData` each simulation tick (e.g. based on milestones) by writing to the singleton entity hosting that component.
@@ -51,7 +53,7 @@
 1. Fetch `ITaxSystem` during your manager/system initialization and cache it.
 2. Call `Readers.Complete()` before modifying rates to stay job-safe.
 3. When altering tax arrays directly, mirror vanilla index math to avoid corrupting unrelated slots.
-4. If you alter the tax formula, update tooltips/estimation logic (`GetEstimatedTaxAmount`) accordingly so UI predictions stay accurate.
+4. If you alter the tax formula, update tooltips/estimation logic (`GetEstimatedTaxAmount`) accordingly so UI predictions stay accurate. When using the profit-based hook, double-check the UI still shows positive income (it uses `TaxSystem`’s estimators which assume revenue-based accumulation).
 5. Document any new policies or multipliers so players understand how your mod's tax rules differ from the base game.
 
 

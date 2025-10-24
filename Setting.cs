@@ -32,7 +32,15 @@ namespace MarketBasedEconomy
                 }
             }
         }
+
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public bool EnableCompanyTaxAdjustments
+        {
+            get => CompanyProfitAdjustmentSystem.FeatureEnabled;
+            set => CompanyProfitAdjustmentSystem.FeatureEnabled = value;
+        }
         [SettingsUISlider(min = 0f, max = 1f, step = 0.05f)]
+        [SettingsUICustomFormat(fractionDigits = 2, separateThousands = false, maxValueWithFraction = 1f)]
         [SettingsUISection(kSection, kEconomyGroup)]
         public float ExternalMarketWeight
         {
@@ -41,6 +49,7 @@ namespace MarketBasedEconomy
         }
 
         [SettingsUISlider(min = 0.1f, max = 0.75f, step = 0.05f)]
+        [SettingsUICustomFormat(fractionDigits = 2, separateThousands = false, maxValueWithFraction = 1f)]
         [SettingsUISection(kSection, kEconomyGroup)]
         public float MinimumUtilizationShare
         {
@@ -49,6 +58,7 @@ namespace MarketBasedEconomy
         }
 
         [SettingsUISlider(min = 0f, max = 1f, step = 0.05f)]
+        [SettingsUICustomFormat(fractionDigits = 2, separateThousands = false, maxValueWithFraction = 1f)]
         [SettingsUISection(kSection, kEconomyGroup)]
         public float UnemploymentWagePenalty
         {
@@ -57,6 +67,7 @@ namespace MarketBasedEconomy
         }
 
         [SettingsUISlider(min = 0f, max = 1.5f, step = 0.05f)]
+        [SettingsUICustomFormat(fractionDigits = 2, separateThousands = false, maxValueWithFraction = 1.5f)]
         [SettingsUISection(kSection, kEconomyGroup)]
         public float SkillShortagePremium
         {
@@ -65,11 +76,23 @@ namespace MarketBasedEconomy
         }
 
         [SettingsUISlider(min = 0f, max = 1f, step = 0.05f)]
+        [SettingsUICustomFormat(fractionDigits = 2, separateThousands = false, maxValueWithFraction = 1f)]
         [SettingsUISection(kSection, kEconomyGroup)]
         public float EducationMismatchPremium
         {
             get => LaborMarketManager.Instance.EducationMismatchPremium;
             set => LaborMarketManager.Instance.EducationMismatchPremium = math.max(0f, value);
+        }
+
+        [SettingsUIButton]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public bool ResetEconomyDefaults
+        {
+            set
+            {
+                SetDefaults();
+                ApplyAndSave();
+            }
         }
 
         public Setting(IMod mod) : base(mod)
@@ -94,6 +117,7 @@ namespace MarketBasedEconomy
             laborManager.EducationMismatchPremium = 0.2f;
 
             Diagnostics.DiagnosticsLogger.Enabled = false;
+            CompanyProfitAdjustmentSystem.FeatureEnabled = false;
         }
     }
 
@@ -116,9 +140,8 @@ namespace MarketBasedEconomy
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ExternalMarketWeight)), "External market weight" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ExternalMarketWeight)), "Blend factor between local supply-demand price and external trade price references." },
 
-
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MinimumUtilizationShare)), "Minimum utilization" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MinimumUtilizationShare)), "Minimum staffed fraction required before companies can expand their workforce." },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MinimumUtilizationShare)), "A fraction of the building employee capacity set as the company minimum staffed required." },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.UnemploymentWagePenalty)), "Unemployment wage penalty" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.UnemploymentWagePenalty)), "Wage reduction factor applied when unemployment rises." },
@@ -129,8 +152,14 @@ namespace MarketBasedEconomy
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.EducationMismatchPremium)), "Education mismatch wage premium" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.EducationMismatchPremium)), "Additional wage boost when low-skill workers dominate the labor pool." },
 
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ResetEconomyDefaults)), "Reset economy defaults" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ResetEconomyDefaults)), "Restore all economy settings in this mod to their default values." },
+
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.EnableDiagnosticsLog)), "Enable diagnostics log" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.EnableDiagnosticsLog)), "Write detailed economy diagnostics to MarketEconomy.log for balancing and debugging." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.EnableCompanyTaxAdjustments)), "Enable company tax adjustments (Experimental Large Performance Impact)" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.EnableCompanyTaxAdjustments)), "Apply the experimental profit-based tax recalculation (Experimental Large Performance Impact)." },
             };
         }
 

@@ -34,6 +34,7 @@ namespace MarketBasedEconomy
             BurstCompiler.Options.EnableBurstCompilation = true;
             updateSystem.UpdateBefore<WageAdjustmentSystem, PayWageSystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateBefore<MarketProductSystem, ResourceExporterSystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateBefore<CompanyProfitAdjustmentSystem, TaxSystem>(SystemUpdatePhase.GameSimulation);
 
             HarmonyBridge.ApplyAll(HarmonyId);
         }

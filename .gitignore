@@ -3,3 +3,7 @@ ref/
 
 .fake
 obj/
+Properties/PublishConfiguration.xml
+bin/
+Asset/
+Library/

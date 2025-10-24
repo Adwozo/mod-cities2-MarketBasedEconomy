@@ -24,6 +24,7 @@ namespace MarketBasedEconomy.Economy
         private ResourceSystem m_ResourceSystem;
         private NativeHashMap<int, MarketMetrics> m_MarketMetrics;
         private NativeHashMap<int, MarketPriceState> m_PriceStates;
+        private NativeHashMap<Entity, CompanyFinanceState> m_CompanyFinanceStates;
 
         public struct MarketMetrics
         {
@@ -65,6 +66,38 @@ namespace MarketBasedEconomy.Economy
             public float Multiplier;
             public float ExternalFloor;
             public float ExternalCeiling;
+        }
+
+
+        public struct CompanyFinanceState
+        {
+            public float RentAccruedToday;
+            public int LastRentTick;
+
+            public void AccumulateRent(float rent, int currentTick)
+            {
+                if (LastRentTick != currentTick)
+                {
+                    RentAccruedToday = 0f;
+                }
+
+                RentAccruedToday += math.max(0f, rent);
+                LastRentTick = currentTick;
+            }
+
+            public float ConsumeRent(float fraction = 1f)
+            {
+                fraction = math.saturate(fraction);
+                float consumed = RentAccruedToday * fraction;
+                RentAccruedToday = math.max(0f, RentAccruedToday - consumed);
+                return consumed;
+            }
+
+            public void Reset()
+            {
+                RentAccruedToday = 0f;
+                LastRentTick = 0;
+            }
         }
 
         public struct MarketMetricsProxy : IComponentData
