@@ -132,7 +132,7 @@ namespace MarketBasedEconomy
         {
             return new Dictionary<string, string>
             {
-                { m_Setting.GetSettingsLocaleID(), "MarketBasedEconomy" },
+                { m_Setting.GetSettingsLocaleID(), "Market Based Economy" },
                 { m_Setting.GetOptionTabLocaleID(Setting.kSection), "Main" },
 
                 { m_Setting.GetOptionGroupLocaleID(Setting.kEconomyGroup), "Economy" },
