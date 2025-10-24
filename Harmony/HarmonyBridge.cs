@@ -16,12 +16,10 @@ namespace MarketBasedEconomy.Harmony
         private static readonly HarmonyLib.Harmony HarmonyInstance = new HarmonyLib.Harmony(Mod.HarmonyId);
         private static bool _patchesApplied;
         private static bool _marketPricePostfixLogged;
-        private static bool _wagePostfixLogged;
 
         public static void ResetDebugFlags()
         {
             _marketPricePostfixLogged = false;
-            _wagePostfixLogged = false;
         }
 
         public static void ApplyAll(string harmonyId)
@@ -175,20 +173,20 @@ namespace MarketBasedEconomy.Harmony
             __result = Economy.MarketEconomyManager.Instance.AdjustMarketPrice(r, __result);
         }
 
-        private static void IndustrialPricePostfix(Resource r, ResourcePrefabs __1, ComponentLookup<ResourceData> __2, ref float __result)
+        private static void IndustrialPricePostfix(Resource r, ResourcePrefabs prefabs, ComponentLookup<ResourceData> resourceDatas, ref float __result)
         {
             if (__result <= 0f)
             {
                 return;
             }
 
-            Entity entity = __1[r];
-            if (!__2.HasComponent(entity))
+            Entity entity = prefabs[r];
+            if (!resourceDatas.HasComponent(entity))
             {
                 return;
             }
 
-            var data = __2[entity];
+            var data = resourceDatas[entity];
 
             __result = Economy.MarketEconomyManager.Instance.AdjustPriceComponent(
                 r,
@@ -198,20 +196,20 @@ namespace MarketBasedEconomy.Harmony
                 skipLogging: false);
         }
 
-        private static void ServicePricePostfix(Resource r, ResourcePrefabs __1, ComponentLookup<ResourceData> __2, ref float __result)
+        private static void ServicePricePostfix(Resource r, ResourcePrefabs prefabs, ComponentLookup<ResourceData> resourceDatas, ref float __result)
         {
             if (__result <= 0f)
             {
                 return;
             }
 
-            Entity entity = __1[r];
-            if (!__2.HasComponent(entity))
+            Entity entity = prefabs[r];
+            if (!resourceDatas.HasComponent(entity))
             {
                 return;
             }
 
-            var data = __2[entity];
+            var data = resourceDatas[entity];
 
             __result = Economy.MarketEconomyManager.Instance.AdjustPriceComponent(
                 r,

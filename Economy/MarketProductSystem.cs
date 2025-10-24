@@ -1,3 +1,4 @@
+using System;
 using Game.Common;
 using Game.Companies;
 using Game.Economy;
@@ -12,12 +13,13 @@ using UnityEngine;
 namespace MarketBasedEconomy.Economy
 {
     /// <summary>
-    /// Ensures office/telecom style products (zero-weight resources) are sold and generate revenue.
+    /// Performs sales for company products using market-driven pricing. Zero-weight products follow the existing
+    /// virtual-sale flow, while weighted products are priced dynamically before being transferred to money.
     /// </summary>
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateBefore(typeof(ResourceExporterSystem))]
     [UpdateBefore(typeof(ResourceBuyerSystem))]
-    public partial class ZeroWeightProductSystem : SystemBase
+    public partial class MarketProductSystem : SystemBase
     {
         private const int kUpdatesPerDay = 32;
         private const int kMinSaleAmount = 20;
@@ -58,12 +60,12 @@ namespace MarketBasedEconomy.Economy
             var processLookup = GetComponentLookup<IndustrialProcessData>(true);
 
             Entities
-                .WithName("ZeroWeightProductSale")
+                .WithName("MarketProductSale")
                 .WithStoreEntityQueryInField(ref m_CompanyQuery)
                 .WithReadOnly(resourcePrefabs)
                 .WithReadOnly(resourceDatas)
                 .WithReadOnly(processLookup)
-                .WithoutBurst() // uses managed helpers + logging
+                .WithoutBurst() // managed helpers + diagnostics
                 .ForEach((Entity entity,
                           DynamicBuffer<Game.Economy.Resources> resources,
                           in PrefabRef prefabRef,
@@ -89,10 +91,10 @@ namespace MarketBasedEconomy.Economy
                     }
 
                     ResourceData resourceData = resourceDatas[resourceEntity];
-                    if (resourceData.m_Weight != 0)
-                    {
-                        return; // handled by vanilla logistics
-                    }
+                    bool isZeroWeight = resourceData.m_Weight == 0;
+
+                    float sanitizedIndustrialPrice = math.max(0f, resourceData.m_Price.x);
+                    float sanitizedServicePrice = math.max(0f, resourceData.m_Price.y);
 
                     int available = EconomyUtils.GetResources(outputResource, resources);
                     if (available < kMinSaleAmount)
@@ -103,29 +105,79 @@ namespace MarketBasedEconomy.Economy
                     int batch = math.max(processData.m_Output.m_Amount, kMinSaleAmount);
                     int saleAmount = math.clamp(available, kMinSaleAmount, kMaxSalePerTick);
                     saleAmount = math.min(saleAmount, batch);
+                    if (saleAmount <= 0)
+                    {
+                        return;
+                    }
 
-                    float unitPrice = MarketEconomyManager.Instance.AdjustPriceComponent(
-                        outputResource,
-                        resourceData.m_Price.x,
-                        resourceData.m_Price.y,
-                        MarketEconomyManager.PriceComponent.Service,
-                        skipLogging: true);
+                    var manager = MarketEconomyManager.Instance;
 
-                    int revenue = Mathf.RoundToInt(unitPrice * saleAmount);
-                    if (revenue <= 0)
+                    if (isZeroWeight)
+                    {
+                        float unitPrice = manager.AdjustPriceComponent(
+                            outputResource,
+                            sanitizedIndustrialPrice,
+                            sanitizedServicePrice,
+                            MarketEconomyManager.PriceComponent.Market,
+                            skipLogging: false);
+
+                        int revenue = Mathf.RoundToInt(unitPrice * saleAmount);
+                        if (revenue <= 0)
+                        {
+                            return;
+                        }
+
+                        EconomyUtils.AddResources(outputResource, -saleAmount, resources);
+                        EconomyUtils.AddResources(Resource.Money, revenue, resources);
+
+                        manager.RegisterSupply(outputResource, saleAmount);
+                        manager.RegisterDemand(outputResource, saleAmount);
+
+                        Diagnostics.DiagnosticsLogger.Log(
+                            "Economy",
+                            $"Virtual sale for {outputResource}: amount={saleAmount}, unit={unitPrice:F2}, revenue={revenue}");
+                        return;
+                    }
+
+                    float industrialComponent = Math.Max(0f, resourceData.m_Price.x);
+                    float serviceComponent = Math.Max(0f, resourceData.m_Price.y);
+                    float vanillaPrice = industrialComponent + serviceComponent;
+                    if (vanillaPrice <= 0f)
+                    {
+                        return;
+                    }
+
+                    float supply;
+                    float demand;
+                    if (!manager.TryGetSupplyDemand(outputResource, out supply, out demand))
+                    {
+                        supply = 1f;
+                        demand = 1f;
+                    }
+
+                    float ratio = demand / math.max(1f, supply);
+                    float adjustedPrice = vanillaPrice * ratio;
+                    float minPrice = vanillaPrice * manager.MinimumPriceMultiplier;
+                    float maxPrice = vanillaPrice * manager.MaximumPriceMultiplier;
+                    adjustedPrice = math.clamp(adjustedPrice, minPrice, maxPrice);
+
+                    int weightedRevenue = Mathf.RoundToInt(adjustedPrice * saleAmount);
+                    if (weightedRevenue <= 0)
                     {
                         return;
                     }
 
                     EconomyUtils.AddResources(outputResource, -saleAmount, resources);
-                    EconomyUtils.AddResources(Resource.Money, revenue, resources);
+                    EconomyUtils.AddResources(Resource.Money, weightedRevenue, resources);
+
+                    manager.RegisterSupply(outputResource, saleAmount);
+                    manager.RegisterDemand(outputResource, saleAmount);
 
                     Diagnostics.DiagnosticsLogger.Log(
                         "Economy",
-                        $"Virtual sale for {outputResource}: amount={saleAmount}, unit={unitPrice:F2}, revenue={revenue}");
+                        $"Market sale for {outputResource}: weight={resourceData.m_Weight}, available={available}, sale={saleAmount}, vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, ratio={ratio:F2}, adjusted={adjustedPrice:F2}, revenue={weightedRevenue}");
                 })
                 .Run();
         }
     }
 }
-

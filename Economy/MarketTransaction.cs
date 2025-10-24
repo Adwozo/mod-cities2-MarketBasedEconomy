@@ -7,16 +7,12 @@ namespace MarketBasedEconomy.Economy
     {
         public Resource Resource;
         public float Amount;
-        public MarketTransactionSystem.TransactionType Type;
+        public MarketTransactionType Type;
+    }
 
-        public MarketTransactionSystem.Transaction ToData()
-        {
-            return new MarketTransactionSystem.Transaction
-            {
-                Resource = Resource,
-                Amount = Amount,
-                Type = Type
-            };
-        }
+    public enum MarketTransactionType : byte
+    {
+        Supply,
+        Demand
     }
 }

@@ -1,10 +1,12 @@
 using System;
 using Colossal.Logging;
 using Game.Economy;
+using Game.Prefabs;
 using Game.Simulation;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Jobs;
 
 namespace MarketBasedEconomy.Economy
 {
@@ -16,8 +18,12 @@ namespace MarketBasedEconomy.Economy
         private static readonly Lazy<MarketEconomyManager> s_Instance = new(() => new MarketEconomyManager());
         private readonly ILog m_Log = LogManager.GetLogger($"{nameof(MarketBasedEconomy)}.{nameof(MarketEconomyManager)}");
         private BudgetSystem m_BudgetSystem;
-        private NativeHashMap<Resource, MarketMetrics> m_MarketMetrics;
-        private NativeHashMap<Resource, MarketPriceState> m_PriceStates;
+        private IndustrialDemandSystem m_IndustrialDemandSystem;
+        private CommercialDemandSystem m_CommercialDemandSystem;
+        private CountCompanyDataSystem m_CountCompanyDataSystem;
+        private ResourceSystem m_ResourceSystem;
+        private NativeHashMap<int, MarketMetrics> m_MarketMetrics;
+        private NativeHashMap<int, MarketPriceState> m_PriceStates;
 
         public struct MarketMetrics
         {
@@ -68,8 +74,8 @@ namespace MarketBasedEconomy.Economy
         private MarketEconomyManager()
         {
             m_Log.SetShowsErrorsInUI(false);
-            m_MarketMetrics = new NativeHashMap<Resource, MarketMetrics>(EconomyUtils.ResourceCount, Allocator.Persistent);
-            m_PriceStates = new NativeHashMap<Resource, MarketPriceState>(EconomyUtils.ResourceCount, Allocator.Persistent);
+            m_MarketMetrics = new NativeHashMap<int, MarketMetrics>(EconomyUtils.ResourceCount, Allocator.Persistent);
+            m_PriceStates = new NativeHashMap<int, MarketPriceState>(EconomyUtils.ResourceCount, Allocator.Persistent);
         }
 
         public static MarketEconomyManager Instance => s_Instance.Value;
@@ -77,12 +83,12 @@ namespace MarketBasedEconomy.Economy
         /// <summary>
         /// Prevent runaway prices by clamping multipliers.
         /// </summary>
-        public float MinimumPriceMultiplier { get; set; } = 0.5f;
+        public float MinimumPriceMultiplier { get; set; } = 0.8f;
 
         /// <summary>
         /// Prevent runaway prices by clamping multipliers.
         /// </summary>
-        public float MaximumPriceMultiplier { get; set; } = 2.5f;
+        public float MaximumPriceMultiplier { get; set; } = 1.2f;
 
         /// <summary>
         /// Controls how aggressively the system reacts to demand imbalance. Range [0,1].
@@ -127,6 +133,10 @@ namespace MarketBasedEconomy.Economy
         public void ResetCaches()
         {
             m_BudgetSystem = null;
+            m_IndustrialDemandSystem = null;
+            m_CommercialDemandSystem = null;
+            m_CountCompanyDataSystem = null;
+            m_ResourceSystem = null;
             if (m_MarketMetrics.IsCreated)
             {
                 m_MarketMetrics.Clear();
@@ -142,6 +152,10 @@ namespace MarketBasedEconomy.Economy
         /// </summary>
         public float AdjustMarketPrice(Resource resource, float vanillaPrice, bool skipLogging = false)
         {
+            if (resource == Resource.Money)
+            {
+                return vanillaPrice;
+            }
             if (vanillaPrice <= 0f || resource == Resource.NoResource)
             {
                 if (!skipLogging)
@@ -164,9 +178,7 @@ namespace MarketBasedEconomy.Economy
             float supply = math.max(1f, snapshot.Value.Supply);
             float demand = math.max(1f, snapshot.Value.Demand);
             float ratio = demand / supply;
-
-            float sensitivity = math.clamp(Sensitivity, 0f, 1f);
-            float multiplier = math.clamp(1f + (ratio - 1f) * sensitivity, MinimumPriceMultiplier, MaximumPriceMultiplier);
+            float multiplier = math.clamp(ratio, MinimumPriceMultiplier, MaximumPriceMultiplier);
 
             float price = vanillaPrice * multiplier;
 
@@ -199,20 +211,20 @@ namespace MarketBasedEconomy.Economy
             float sanitizedService = math.max(0f, serviceComponent);
             float vanillaTotal = sanitizedIndustrial + sanitizedService;
 
-            if (vanillaTotal <= 0f)
+            if (vanillaTotal <= 0f || resource == Resource.NoResource || resource == Resource.Money)
             {
                 float fallback = component switch
                 {
                     PriceComponent.Industrial => sanitizedIndustrial,
                     PriceComponent.Service => sanitizedService,
-                    _ => 0f
+                    _ => vanillaTotal
                 };
 
                 if (!skipLogging)
                 {
                     Diagnostics.DiagnosticsLogger.Log(
                         "Economy",
-                        $"AdjustPriceComponent {component} for {resource}: vanillaTotal<=0, industrial={sanitizedIndustrial:F2}, service={sanitizedService:F2}, returning {fallback:F2}");
+                        $"AdjustPriceComponent {component} for {resource}: vanillaTotal<=0, industrial={sanitizedIndustrial:F2}, service={sanitizedService:F2}, multiplier=1.00, returning {fallback:F2}");
                 }
 
                 return fallback;
@@ -225,6 +237,20 @@ namespace MarketBasedEconomy.Economy
 
             float industrialAdjusted = math.max(0f, sanitizedIndustrial * multiplier * industrialBias);
             float serviceAdjusted = math.max(0f, sanitizedService * multiplier * serviceBias);
+
+            float totalAdjusted = industrialAdjusted + serviceAdjusted;
+
+            if (component == PriceComponent.Market)
+            {
+                if (!skipLogging)
+                {
+                    Diagnostics.DiagnosticsLogger.Log(
+                        "Economy",
+                        $"AdjustPriceComponent {component} for {resource}: vanillaTotal={vanillaTotal:F2}, multiplier={multiplier:F3}, result={totalAdjusted:F2}");
+                }
+
+                return totalAdjusted;
+            }
 
             float result = component switch
             {
@@ -298,7 +324,7 @@ namespace MarketBasedEconomy.Economy
                 result = snapshot;
             }
 
-            if (m_MarketMetrics.IsCreated && m_MarketMetrics.TryGetValue(resource, out var metrics))
+            if (m_MarketMetrics.IsCreated && m_MarketMetrics.TryGetValue((int)resource, out var metrics))
             {
                 if (!result.HasValue)
                 {
@@ -342,6 +368,106 @@ namespace MarketBasedEconomy.Economy
             return m_BudgetSystem;
         }
 
+        private IndustrialDemandSystem GetIndustrialDemandSystem()
+        {
+            if (m_IndustrialDemandSystem != null)
+            {
+                return m_IndustrialDemandSystem;
+            }
+
+            var world = World.DefaultGameObjectInjectionWorld;
+            if (world == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                m_IndustrialDemandSystem = world.GetExistingSystemManaged<IndustrialDemandSystem>();
+            }
+            catch (Exception ex)
+            {
+                m_Log.Warn(ex, "Unable to resolve IndustrialDemandSystem for market metrics.");
+            }
+
+            return m_IndustrialDemandSystem;
+        }
+
+        private CommercialDemandSystem GetCommercialDemandSystem()
+        {
+            if (m_CommercialDemandSystem != null)
+            {
+                return m_CommercialDemandSystem;
+            }
+
+            var world = World.DefaultGameObjectInjectionWorld;
+            if (world == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                m_CommercialDemandSystem = world.GetExistingSystemManaged<CommercialDemandSystem>();
+            }
+            catch (Exception ex)
+            {
+                m_Log.Warn(ex, "Unable to resolve CommercialDemandSystem for market metrics.");
+            }
+
+            return m_CommercialDemandSystem;
+        }
+
+        private CountCompanyDataSystem GetCountCompanyDataSystem()
+        {
+            if (m_CountCompanyDataSystem != null)
+            {
+                return m_CountCompanyDataSystem;
+            }
+
+            var world = World.DefaultGameObjectInjectionWorld;
+            if (world == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                m_CountCompanyDataSystem = world.GetExistingSystemManaged<CountCompanyDataSystem>();
+            }
+            catch (Exception ex)
+            {
+                m_Log.Warn(ex, "Unable to resolve CountCompanyDataSystem for market metrics.");
+            }
+
+            return m_CountCompanyDataSystem;
+        }
+
+        private ResourceSystem GetResourceSystem()
+        {
+            if (m_ResourceSystem != null)
+            {
+                return m_ResourceSystem;
+            }
+
+            var world = World.DefaultGameObjectInjectionWorld;
+            if (world == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                m_ResourceSystem = world.GetExistingSystemManaged<ResourceSystem>();
+            }
+            catch (Exception ex)
+            {
+                m_Log.Warn(ex, "Unable to resolve ResourceSystem for market metrics.");
+            }
+
+            return m_ResourceSystem;
+        }
+
         private float ComputeExternalReferencePrice(in MarketSnapshot snapshot, float fallbackPrice)
         {
             int tradeAmount = math.abs(snapshot.TradeBalance);
@@ -361,12 +487,12 @@ namespace MarketBasedEconomy.Economy
 
         private uint GetCurrentTick()
         {
-            return m_BudgetSystem != null ? m_BudgetSystem.frameIndex : 0;
+            return m_BudgetSystem != null ? m_BudgetSystem.LastUpdate : 0;
         }
 
         private float GetOrUpdatePriceMultiplier(Resource resource)
         {
-            if (!m_PriceStates.TryGetValue(resource, out var state))
+            if (!m_PriceStates.TryGetValue((int)resource, out var state))
             {
                 state = new MarketPriceState
                 {
@@ -382,38 +508,96 @@ namespace MarketBasedEconomy.Economy
                 return state.Multiplier;
             }
 
-            float supply = math.max(1f, snapshot.Value.Supply);
-            float demand = math.max(1f, snapshot.Value.Demand);
-            float diff = (demand - supply) / math.max(1f, supply);
-
-            if (diff > DemandTolerance)
+            float supply;
+            float demand;
+            if (!TryGetDemandSupplyFromSystems(resource, out supply, out demand))
             {
-                state.Multiplier += PriceStep;
-            }
-            else if (diff < -DemandTolerance)
-            {
-                state.Multiplier -= PriceStep;
+                supply = math.max(1f, snapshot.Value.Supply);
+                demand = math.max(1f, snapshot.Value.Demand);
             }
 
-            state.Multiplier = math.clamp(state.Multiplier, MinimumPriceMultiplier, MaximumPriceMultiplier);
-            m_PriceStates[resource] = state;
+            float ratio = demand / math.max(1f, supply);
+            float multiplier = math.clamp(ratio, MinimumPriceMultiplier, MaximumPriceMultiplier);
+            state.Multiplier = multiplier;
+            m_PriceStates[(int)resource] = state;
 
             if (m_MarketMetrics.IsCreated)
             {
-                m_MarketMetrics.Remove(resource);
+                m_MarketMetrics.Remove((int)resource);
             }
 
-            return state.Multiplier;
+            return multiplier;
+        }
+
+        private bool TryGetDemandSupplyFromSystems(Resource resource, out float supply, out float demand)
+        {
+            supply = 0f;
+            demand = 0f;
+
+            var industrial = GetIndustrialDemandSystem();
+            var commercial = GetCommercialDemandSystem();
+            var companyData = GetCountCompanyDataSystem();
+            var resourceSystem = GetResourceSystem();
+            var world = World.DefaultGameObjectInjectionWorld;
+
+            if (industrial == null || commercial == null || companyData == null || resourceSystem == null || world == null)
+            {
+                return false;
+            }
+
+            JobHandle indDeps;
+            var industrialConsumption = industrial.GetConsumption(out indDeps);
+            JobHandle prodDeps;
+            var productions = companyData.GetProduction(out prodDeps);
+            JobHandle comDeps;
+            var commercialConsumption = commercial.GetConsumption(out comDeps);
+            JobHandle commercialCompanyDeps;
+            var commercialCompanyDatas = companyData.GetCommercialCompanyDatas(out commercialCompanyDeps);
+
+            JobHandle.CompleteAll(ref indDeps, ref prodDeps, ref comDeps);
+            commercialCompanyDeps.Complete();
+
+            int index = EconomyUtils.GetResourceIndex(resource);
+            if (index < 0 ||
+                index >= industrialConsumption.Length ||
+                index >= productions.Length ||
+                index >= commercialConsumption.Length ||
+                index >= commercialCompanyDatas.m_ProduceCapacity.Length)
+            {
+                return false;
+            }
+
+            int productionValue = productions[index];
+
+            var resourcePrefabs = resourceSystem.GetPrefabs();
+            Entity resourceEntity = resourcePrefabs[resource];
+            var entityManager = world.EntityManager;
+            if (resourceEntity != Entity.Null && entityManager.HasComponent<ResourceData>(resourceEntity))
+            {
+                var data = entityManager.GetComponentData<ResourceData>(resourceEntity);
+                if (!data.m_IsProduceable)
+                {
+                    productionValue = commercialCompanyDatas.m_ProduceCapacity[index];
+                }
+            }
+
+            int demandValue = industrialConsumption[index] + commercialConsumption[index];
+
+            supply = math.max(1f, productionValue);
+            demand = math.max(1f, demandValue);
+
+            return true;
         }
 
         public void RegisterSupply(Resource resource, float amount)
         {
             if (!m_MarketMetrics.IsCreated)
             {
-                m_MarketMetrics = new NativeHashMap<Resource, MarketMetrics>(EconomyUtils.ResourceCount, Allocator.Persistent);
+                m_MarketMetrics = new NativeHashMap<int, MarketMetrics>(EconomyUtils.ResourceCount, Allocator.Persistent);
             }
 
-            if (m_MarketMetrics.TryGetValue(resource, out var metrics))
+            int key = (int)resource;
+            if (m_MarketMetrics.TryGetValue(key, out var metrics))
             {
                 metrics = metrics.AccumulateSupply(amount);
             }
@@ -423,17 +607,18 @@ namespace MarketBasedEconomy.Economy
             }
 
             metrics.LastUpdatedTick = GetCurrentTick();
-            m_MarketMetrics[resource] = metrics;
+            m_MarketMetrics[key] = metrics;
         }
 
         public void RegisterDemand(Resource resource, float amount)
         {
             if (!m_MarketMetrics.IsCreated)
             {
-                m_MarketMetrics = new NativeHashMap<Resource, MarketMetrics>(EconomyUtils.ResourceCount, Allocator.Persistent);
+                m_MarketMetrics = new NativeHashMap<int, MarketMetrics>(EconomyUtils.ResourceCount, Allocator.Persistent);
             }
 
-            if (m_MarketMetrics.TryGetValue(resource, out var metrics))
+            int key = (int)resource;
+            if (m_MarketMetrics.TryGetValue(key, out var metrics))
             {
                 metrics = metrics.AccumulateDemand(amount);
             }
@@ -443,7 +628,81 @@ namespace MarketBasedEconomy.Economy
             }
 
             metrics.LastUpdatedTick = GetCurrentTick();
-            m_MarketMetrics[resource] = metrics;
+            m_MarketMetrics[key] = metrics;
+        }
+
+        public bool TryGetSupplyDemand(Resource resource, out float supply, out float demand)
+        {
+            bool hasDirectMetrics = TryGetDemandSupplyFromSystems(resource, out supply, out demand);
+
+            if (!hasDirectMetrics)
+            {
+                var snapshot = AggregateSnapshot(resource);
+                if (!snapshot.HasValue)
+                {
+                    return false;
+                }
+
+                supply = math.max(1f, snapshot.Value.Supply);
+                demand = math.max(1f, snapshot.Value.Demand);
+            }
+            else
+            {
+                supply = math.max(1f, supply);
+                demand = math.max(1f, demand);
+            }
+
+            if ((resource & (Resource)28672UL) != Resource.NoResource)
+            {
+                float neutral = math.max(1f, (supply + demand) * 0.5f);
+                supply = neutral;
+                demand = neutral;
+                return true;
+            }
+
+            float span = math.max(1f, supply + demand);
+            float balance = supply - demand;
+            float tolerance = span * DemandTolerance;
+
+            if (math.abs(balance) <= tolerance)
+            {
+                float neutral = math.max(1f, span * 0.5f);
+                supply = neutral;
+                demand = neutral;
+                return true;
+            }
+
+            float lowStock = StorageCompanySystem.kStorageLowStockAmount;
+            float exportStart = StorageCompanySystem.kStorageExportStartAmount;
+
+            float surplusRatio = math.saturate(lowStock / math.max(1f, exportStart));
+            float deficitRatio = math.max(1f, exportStart / math.max(1f, lowStock));
+
+            float normalized = math.saturate(math.abs(balance) / span);
+            float severity = math.saturate(normalized * Sensitivity);
+
+            if (balance > 0f)
+            {
+                float targetRatio = math.lerp(1f, surplusRatio, severity);
+                demand = math.max(1f, supply * targetRatio);
+            }
+            else
+            {
+                float targetRatio = math.lerp(1f, deficitRatio, severity);
+                supply = math.max(1f, demand / math.max(0.001f, targetRatio));
+            }
+
+            return true;
+        }
+
+        public float GetDemandSupplyRatio(Resource resource)
+        {
+            if (TryGetSupplyDemand(resource, out var supply, out var demand))
+            {
+                return demand / math.max(1f, supply);
+            }
+
+            return 1f;
         }
     }
 

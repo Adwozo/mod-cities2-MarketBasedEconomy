@@ -7,6 +7,7 @@ using Game.SceneFlow;
 using Game.Simulation;
 using MarketBasedEconomy.Harmony;
 using MarketBasedEconomy.Economy;
+using Unity.Burst;
 
 namespace MarketBasedEconomy
 {
@@ -30,8 +31,9 @@ namespace MarketBasedEconomy
             AssetDatabase.global.LoadSettings(nameof(MarketBasedEconomy), m_Setting, new Setting(this));
 
             LaborMarketManager.Instance.Reset();
+            BurstCompiler.Options.EnableBurstCompilation = true;
             updateSystem.UpdateBefore<WageAdjustmentSystem, PayWageSystem>(SystemUpdatePhase.GameSimulation);
-            updateSystem.UpdateBefore<ZeroWeightProductSystem, ResourceExporterSystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateBefore<MarketProductSystem, ResourceExporterSystem>(SystemUpdatePhase.GameSimulation);
 
             HarmonyBridge.ApplyAll(HarmonyId);
         }
