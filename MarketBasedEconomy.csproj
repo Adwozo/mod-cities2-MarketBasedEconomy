@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<Configurations>Debug;Release</Configurations>
-		<TargetFramework>net48</TargetFramework>
+		<TargetFramework>net472</TargetFramework>
 		<LangVersion>latest</LangVersion>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 		<GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
@@ -14,6 +14,11 @@
 	<!--Imports must be after PropertyGroup block-->
 	<Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
 	<Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.targets" />
+	
+	<PropertyGroup>
+		<TargetFramework Condition="'$(TargetFramework)' != 'net472'">net472</TargetFramework>
+	</PropertyGroup>
+	
 	<ItemGroup>
 	  <Compile Remove="ref\**" />
 	  <Compile Remove="Bootstrap\**" />
