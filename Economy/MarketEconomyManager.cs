@@ -209,40 +209,44 @@ namespace MarketBasedEconomy.Economy
                 return vanillaPrice;
             }
 
-            var snapshot = AggregateSnapshot(resource);
-            if (!snapshot.HasValue)
+            float supply;
+            float demand;
+            if (!TryGetSupplyDemand(resource, out supply, out demand))
             {
                 if (!skipLogging)
                 {
-                    Diagnostics.DiagnosticsLogger.Log("Economy", $"No market snapshot for {resource}; using vanilla price {vanillaPrice:F2}.");
+                    Diagnostics.DiagnosticsLogger.Log("Economy", $"No supply/demand for {resource}; using vanilla price {vanillaPrice:F2}.");
                 }
                 return vanillaPrice;
             }
 
-            float supply = math.max(1f, snapshot.Value.Supply);
-            float demand = math.max(1f, snapshot.Value.Demand);
-            float ratio = demand / supply;
+            supply = math.max(1f, supply);
+            demand = math.max(1f, demand);
+            float rawRatio = demand / supply;
+            float sensitivity = math.clamp(Sensitivity, 0f, 1f);
+            float ratio = sensitivity > 0f ? math.pow(rawRatio, sensitivity) : 1f;
             float multiplier = math.clamp(ratio, MinimumPriceMultiplier, MaximumPriceMultiplier);
 
-            float price = vanillaPrice * multiplier;
+            float marketPrice = vanillaPrice * multiplier;
 
             float externalBlend = math.clamp(ExternalPriceInfluence, 0f, 1f);
-            float externalPrice = price;
+            float blendedPrice = marketPrice;
             if (externalBlend > 0f)
             {
-                externalPrice = ComputeExternalReferencePrice(snapshot.Value, price);
-                price = math.lerp(price, externalPrice, externalBlend);
+                blendedPrice = math.lerp(marketPrice, vanillaPrice, externalBlend);
             }
 
             float minPrice = vanillaPrice * MinimumPriceMultiplier;
             float maxPrice = vanillaPrice * MaximumPriceMultiplier;
-            float clampedPrice = math.clamp(price, minPrice, maxPrice);
+            float clampedPrice = math.clamp(blendedPrice, minPrice, maxPrice);
 
             EconomyAnalyticsRecorder.Instance.RecordPrice(resource, clampedPrice);
 
             if (!skipLogging)
             {
-                Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust {resource}: vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, ratio={ratio:F2}, multiplier={multiplier:F2}, externalBlend={externalBlend:F2}, externalPrice={externalPrice:F2}, result={price:F2}, clamped={clampedPrice:F2}");
+                Diagnostics.DiagnosticsLogger.Log(
+                    "Economy",
+            $"Price adjust {resource}: vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, rawRatio={rawRatio:F2}, sensitivity={sensitivity:F2}, multiplier={multiplier:F2}, blend={externalBlend:F2}, market={marketPrice:F2}, blended={blendedPrice:F2}, clamped={clampedPrice:F2}");
             }
 
             return clampedPrice;
@@ -514,23 +518,6 @@ namespace MarketBasedEconomy.Economy
             }
 
             return m_ResourceSystem;
-        }
-
-        private float ComputeExternalReferencePrice(in MarketSnapshot snapshot, float fallbackPrice)
-        {
-            int tradeAmount = math.abs(snapshot.TradeBalance);
-            if (tradeAmount <= 0)
-            {
-                return fallbackPrice;
-            }
-
-            float external = math.abs(snapshot.TradeWorth) / tradeAmount;
-            if (!math.isfinite(external) || external <= 0f)
-            {
-                return fallbackPrice;
-            }
-
-            return external;
         }
 
         private bool IsZeroWeightResource(Resource resource)

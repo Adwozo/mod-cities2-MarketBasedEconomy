@@ -135,9 +135,7 @@ namespace MarketBasedEconomy.Economy
                         return;
                     }
 
-                    float industrialComponent = Math.Max(0f, resourceData.m_Price.x);
-                    float serviceComponent = Math.Max(0f, resourceData.m_Price.y);
-                    float vanillaPrice = industrialComponent + serviceComponent;
+                    float vanillaPrice = sanitizedIndustrialPrice + sanitizedServicePrice;
                     if (vanillaPrice <= 0f)
                     {
                         return;
@@ -151,15 +149,16 @@ namespace MarketBasedEconomy.Economy
                         demand = 1f;
                     }
 
-                    float ratio = demand / math.max(1f, supply);
-                    float adjustedPrice = vanillaPrice * ratio;
-                    float minPrice = vanillaPrice * manager.MinimumPriceMultiplier;
-                    float maxPrice = vanillaPrice * manager.MaximumPriceMultiplier;
-                    adjustedPrice = math.clamp(adjustedPrice, minPrice, maxPrice);
+                    float rawRatio = demand / math.max(1f, supply);
+                    float sensitivity = math.clamp(manager.Sensitivity, 0f, 1f);
+                    float ratio = sensitivity > 0f ? math.pow(rawRatio, sensitivity) : 1f;
+                    float marketMultiplier = math.clamp(ratio, manager.MinimumPriceMultiplier, manager.MaximumPriceMultiplier);
+                    float marketPrice = vanillaPrice * marketMultiplier;
 
-                    Analytics.EconomyAnalyticsRecorder.Instance.RecordPrice(outputResource, adjustedPrice);
+                    float finalPrice = manager.AdjustMarketPrice(outputResource, vanillaPrice, skipLogging: true);
+                    float multiplier = vanillaPrice > 0f ? finalPrice / vanillaPrice : 1f;
 
-                    int weightedRevenue = Mathf.RoundToInt(adjustedPrice * saleAmount);
+                    int weightedRevenue = Mathf.RoundToInt(finalPrice * saleAmount);
                     if (weightedRevenue <= 0)
                     {
                         return;
@@ -173,7 +172,7 @@ namespace MarketBasedEconomy.Economy
 
                     Diagnostics.DiagnosticsLogger.Log(
                         "Economy",
-                        $"Market sale for {outputResource}: weight={resourceData.m_Weight}, available={available}, sale={saleAmount}, vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, ratio={ratio:F2}, adjusted={adjustedPrice:F2}, revenue={weightedRevenue}");
+                        $"Market sale for {outputResource}: weight={resourceData.m_Weight}, available={available}, sale={saleAmount}, vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, rawRatio={rawRatio:F2}, sensitivity={sensitivity:F2}, marketMultiplier={marketMultiplier:F3}, marketPrice={marketPrice:F2}, finalMultiplier={multiplier:F3}, finalPrice={finalPrice:F2}, revenue={weightedRevenue}");
                 })
                 .Run();
         }
