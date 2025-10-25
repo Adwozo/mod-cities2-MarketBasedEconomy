@@ -1,5 +1,6 @@
 using System;
 using Colossal.Logging;
+using Game.Companies;
 using Game.Prefabs;
 using Game.Simulation;
 using Unity.Entities;
@@ -12,6 +13,8 @@ namespace MarketBasedEconomy.Economy
         private static readonly Lazy<LaborMarketManager> s_Instance = new(() => new LaborMarketManager());
         private readonly ILog m_Log = LogManager.GetLogger($"{nameof(MarketBasedEconomy)}.{nameof(LaborMarketManager)}");
         private CountHouseholdDataSystem m_HouseholdDataSystem;
+        private CountWorkplacesSystem m_WorkplacesSystem;
+        private bool m_WarnedMissingWorkplaceSystem;
 
         private LaborMarketManager()
         {
@@ -21,8 +24,9 @@ namespace MarketBasedEconomy.Economy
         public static LaborMarketManager Instance => s_Instance.Value;
 
         public float UnemploymentWagePenalty { get; set; } = 0.6f;
-        public float SkillShortagePremium { get; set; } = 0.8f;
-        public float EducationMismatchPremium { get; set; } = 0.2f;
+    public float SkillShortagePremium { get; set; } = 0.8f;
+    public float EducationMismatchPremium { get; set; } = 0.2f;
+    public float LevelDemandSensitivity { get; set; } = 0.3f;
 
         private bool m_BaselineInitialized;
         private readonly int[] m_BaselineWages = new int[5];
@@ -35,6 +39,7 @@ namespace MarketBasedEconomy.Economy
             m_LastMultiplier = 1f;
             Array.Clear(m_BaselineWages, 0, m_BaselineWages.Length);
             Array.Clear(m_LastAppliedWages, 0, m_LastAppliedWages.Length);
+            m_WarnedMissingWorkplaceSystem = false;
         }
 
         public bool EnsureBaseline(EconomyParameterData data)
@@ -73,6 +78,18 @@ namespace MarketBasedEconomy.Economy
                 return WageAdjustmentInfo.Empty;
             }
 
+            var workplaceSystem = GetWorkplacesSystem();
+            bool hasWorkplaceData = workplaceSystem != null;
+            if (!hasWorkplaceData && !m_WarnedMissingWorkplaceSystem)
+            {
+                Diagnostics.DiagnosticsLogger.Log("Labor", "Workplace system unavailable; level balance data disabled.");
+                m_WarnedMissingWorkplaceSystem = true;
+            }
+            else if (hasWorkplaceData)
+            {
+                m_WarnedMissingWorkplaceSystem = false;
+            }
+
             try
             {
                 Diagnostics.DiagnosticsLogger.Log("Labor", "Begin wage adjust: fetching household count data");
@@ -96,6 +113,25 @@ namespace MarketBasedEconomy.Economy
                 float multiplier = 1f - penalty + premium + mismatchPremium;
                 multiplier = math.clamp(multiplier, 0.5f, 1.75f);
 
+                Workplaces freeWorkplaces = default;
+                Workplaces availableWorkers = default;
+                Workplaces balance = default;
+
+                availableWorkers[0] = data.m_EmployableByEducation0;
+                availableWorkers[1] = data.m_EmployableByEducation1;
+                availableWorkers[2] = data.m_EmployableByEducation2;
+                availableWorkers[3] = data.m_EmployableByEducation3;
+                availableWorkers[4] = data.m_EmployableByEducation4;
+
+                if (hasWorkplaceData)
+                {
+                    freeWorkplaces = workplaceSystem.GetFreeWorkplaces();
+                    for (int level = 0; level < 5; level++)
+                    {
+                        balance[level] = freeWorkplaces[level] - availableWorkers[level];
+                    }
+                }
+
                 var info = new WageAdjustmentInfo
                 {
                     HasData = true,
@@ -106,12 +142,19 @@ namespace MarketBasedEconomy.Economy
                     Workforce = workforce,
                     Employed = employed,
                     SkilledShare = skilledShare,
-                    LowSkillShare = lowSkillShare
+                    LowSkillShare = lowSkillShare,
+                    HasWorkplaceData = hasWorkplaceData,
+                    FreeWorkplaces = freeWorkplaces,
+                    AvailableWorkers = availableWorkers,
+                    LevelBalance = balance
                 };
+
+                string freeWorkplaceText = hasWorkplaceData ? FormatWorkplaces(freeWorkplaces) : "n/a";
+                string balanceText = hasWorkplaceData ? FormatWorkplaces(balance) : "n/a";
 
                 Diagnostics.DiagnosticsLogger.Log(
                     "Labor",
-                    $"Wage adjust data: workforce={workforce}, employed={employed}, unemployment={unemploymentRate:P1}, skilledShare={skilledShare:P1}, lowSkillShare={lowSkillShare:P1}, penalty={penalty:F2}, premium={premium:F2}, mismatchPremium={mismatchPremium:F2}, multiplier={multiplier:F2}");
+                    $"Wage adjust data: workforce={workforce}, employed={employed}, unemployment={unemploymentRate:P1}, skilledShare={skilledShare:P1}, lowSkillShare={lowSkillShare:P1}, penalty={penalty:F2}, premium={premium:F2}, mismatchPremium={mismatchPremium:F2}, multiplier={multiplier:F2}, free=({freeWorkplaceText}), available=({FormatWorkplaces(availableWorkers)}), balance=({balanceText})");
 
                 return info;
             }
@@ -137,17 +180,27 @@ namespace MarketBasedEconomy.Economy
                 return;
             }
 
-            data.m_Wage0 = AdjustLevel(0, info.Multiplier);
-            data.m_Wage1 = AdjustLevel(1, info.Multiplier);
-            data.m_Wage2 = AdjustLevel(2, info.Multiplier);
-            data.m_Wage3 = AdjustLevel(3, info.Multiplier);
-            data.m_Wage4 = AdjustLevel(4, info.Multiplier);
+            float level0Multiplier = ComputeLevelMultiplier(0, info);
+            float level1Multiplier = ComputeLevelMultiplier(1, info);
+            float level2Multiplier = ComputeLevelMultiplier(2, info);
+            float level3Multiplier = ComputeLevelMultiplier(3, info);
+            float level4Multiplier = ComputeLevelMultiplier(4, info);
 
-            m_LastMultiplier = info.Multiplier;
+            data.m_Wage0 = AdjustLevel(0, level0Multiplier);
+            data.m_Wage1 = AdjustLevel(1, level1Multiplier);
+            data.m_Wage2 = AdjustLevel(2, level2Multiplier);
+            data.m_Wage3 = AdjustLevel(3, level3Multiplier);
+            data.m_Wage4 = AdjustLevel(4, level4Multiplier);
+
+            m_LastMultiplier = info.HasWorkplaceData
+                ? (level0Multiplier + level1Multiplier + level2Multiplier + level3Multiplier + level4Multiplier) / 5f
+                : info.Multiplier;
 
             Diagnostics.DiagnosticsLogger.Log(
                 "Labor",
-                $"Applied wage multiplier {info.Multiplier:F2} -> wages=({data.m_Wage0},{data.m_Wage1},{data.m_Wage2},{data.m_Wage3},{data.m_Wage4}) baseline=({m_BaselineWages[0]},{m_BaselineWages[1]},{m_BaselineWages[2]},{m_BaselineWages[3]},{m_BaselineWages[4]})");
+                info.HasWorkplaceData
+                    ? $"Applied wage multipliers ({FormatMultipliers(level0Multiplier, level1Multiplier, level2Multiplier, level3Multiplier, level4Multiplier)}) -> wages=({data.m_Wage0},{data.m_Wage1},{data.m_Wage2},{data.m_Wage3},{data.m_Wage4}) baseline=({m_BaselineWages[0]},{m_BaselineWages[1]},{m_BaselineWages[2]},{m_BaselineWages[3]},{m_BaselineWages[4]})"
+                    : $"Applied wage multiplier {info.Multiplier:F2} -> wages=({data.m_Wage0},{data.m_Wage1},{data.m_Wage2},{data.m_Wage3},{data.m_Wage4}) baseline=({m_BaselineWages[0]},{m_BaselineWages[1]},{m_BaselineWages[2]},{m_BaselineWages[3]},{m_BaselineWages[4]})");
         }
 
         public int ApplyWageMultiplier(int currentWage)
@@ -188,6 +241,7 @@ namespace MarketBasedEconomy.Economy
             public static readonly WageAdjustmentInfo Empty = default;
 
             public bool HasData;
+            public bool HasWorkplaceData;
             public float Multiplier;
             public float Penalty;
             public float Premium;
@@ -196,6 +250,9 @@ namespace MarketBasedEconomy.Economy
             public int Employed;
             public float SkilledShare;
             public float LowSkillShare;
+            public Workplaces FreeWorkplaces;
+            public Workplaces AvailableWorkers;
+            public Workplaces LevelBalance;
         }
 
         private CountHouseholdDataSystem GetHouseholdDataSystem()
@@ -221,6 +278,63 @@ namespace MarketBasedEconomy.Economy
             }
 
             return m_HouseholdDataSystem;
+        }
+
+        private CountWorkplacesSystem GetWorkplacesSystem()
+        {
+            if (m_WorkplacesSystem != null)
+            {
+                return m_WorkplacesSystem;
+            }
+
+            var world = World.DefaultGameObjectInjectionWorld;
+            if (world == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                m_WorkplacesSystem = world.GetExistingSystemManaged<CountWorkplacesSystem>();
+            }
+            catch (Exception ex)
+            {
+                m_Log.Warn(ex, "Unable to resolve CountWorkplacesSystem for labor market adjustments.");
+            }
+
+            return m_WorkplacesSystem;
+        }
+
+        private float ComputeLevelMultiplier(int level, in WageAdjustmentInfo info)
+        {
+            float baseMultiplier = math.clamp(info.Multiplier, 0.5f, 1.75f);
+            if (!info.HasWorkplaceData)
+            {
+                return baseMultiplier;
+            }
+
+            int free = math.max(0, info.FreeWorkplaces[level]);
+            int available = math.max(0, info.AvailableWorkers[level]);
+            int total = free + available;
+            if (total == 0)
+            {
+                return baseMultiplier;
+            }
+
+            float demandIndex = math.clamp((free - available) / (float)total, -1f, 1f);
+            float sensitivity = math.clamp(LevelDemandSensitivity, 0f, 1f);
+            float levelMultiplier = baseMultiplier * (1f + demandIndex * sensitivity);
+            return math.clamp(levelMultiplier, 0.5f, 1.75f);
+        }
+
+        private static string FormatWorkplaces(in Workplaces workplaces)
+        {
+            return $"{workplaces[0]},{workplaces[1]},{workplaces[2]},{workplaces[3]},{workplaces[4]}";
+        }
+
+        private static string FormatMultipliers(float level0, float level1, float level2, float level3, float level4)
+        {
+            return $"{level0:F2},{level1:F2},{level2:F2},{level3:F2},{level4:F2}";
         }
     }
 }
