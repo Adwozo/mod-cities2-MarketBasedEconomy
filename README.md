@@ -7,6 +7,7 @@ Market Based Economy reshapes the Cities: Skylines II simulation so prices, wage
 - **Revenue-aware company sales** – Intercepts processing company updates to turn inventory movement into revenue that respects market prices while feeding back fresh supply/demand metrics.
 - **Labor-driven wages** – Adjusts `EconomyParameterData` before vanilla wage payout so unemployment, skill shortages, and education mismatch can raise or lower wages.
 - **Minimum workplace utilization** – Ensures commercial and industrial buildings maintain a baseline worker count based on building size, level, and process data, avoiding chronic understaffing.
+- **In-game economy overlay** – A lightweight IMGUI panel with Live, Wages, and Prices tabs. Toggle it with the configurable hotkey (Shift + G by default) to inspect live wage snapshots, per-education-level wage graphs with visibility toggles, and a scrollable product price index complete with filters, dynamic axes, and live markers.
 - **Diagnostics pipeline** – Optional structured logging (`MarketEconomy.log`) captures market, wage, and company data for balancing.
 - **Experimental profit taxation** – When enabled in settings, recalculates company untaxed income so taxation follows profit minus rent rather than raw turnover.
 
@@ -23,6 +24,10 @@ All options live under **Options ▶ Mods ▶ Market Based Economy** and save pe
 - `Unemployment wage penalty` – Wage reduction when unemployment rises.
 - `Skill shortage wage premium` – Wage bump when skilled labor is scarce.
 - `Education mismatch wage premium` – Extra wage pressure when most workers are low skilled.
+- `Enable overlay hotkey` – Allow the keyboard shortcut to toggle the analytics overlay.
+- `Require Shift for overlay hotkey` – Hold Shift with the hotkey to avoid accidental toggles.
+- `Overlay hotkey key` – Enter the key name (e.g. `G`, `F5`, `Alpha1`) used to toggle the overlay.
+- `Rebind overlay hotkey` – Click to start listening for a new key, then press it in-game (Esc cancels).
 - `Enable diagnostics log` – Writes verbose logs to help diagnose balancing issues.
 - `Enable company tax adjustments (Experimental)` – Turns on the profit-based tax recalculation. Disabled by default because it currently impacts performance.
 - `Reset economy defaults` – Restores the shipping values shown above.

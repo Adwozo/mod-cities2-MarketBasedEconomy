@@ -6,19 +6,23 @@ using Game.Modding;
 using Game.Settings;
 using Game.UI;
 using Game.UI.Localization;
+using MarketBasedEconomy.Analytics;
 using MarketBasedEconomy.Economy;
 using Unity.Mathematics;
+using UnityEngine;
 
 namespace MarketBasedEconomy
 {
     [FileLocation(nameof(MarketBasedEconomy))]
-    [SettingsUIGroupOrder(kEconomyGroup)]
-    [SettingsUIShowGroupName(kEconomyGroup)]
+    [SettingsUIGroupOrder(kEconomyGroup, kKeybindingGroup)]
+    [SettingsUIShowGroupName(kEconomyGroup, kKeybindingGroup)]
+    [SettingsUIKeyboardAction(Mod.kToggleOverlayActionName, ActionType.Button, usages: new string[] { Usages.kDefaultUsage }, interactions: new string[] { "Press" })]
     public class Setting : ModSetting
     {
         public const string kSection = "Main";
 
         public const string kEconomyGroup = "Economy";
+        public const string kKeybindingGroup = "KeyBinding";
         [SettingsUISection(kSection, kEconomyGroup)]
         public bool EnableDiagnosticsLog
         {
@@ -84,6 +88,20 @@ namespace MarketBasedEconomy
             set => LaborMarketManager.Instance.EducationMismatchPremium = math.max(0f, value);
         }
 
+        [SettingsUIKeyboardBinding(BindingKeyboard.G, Mod.kToggleOverlayActionName, shift: true)]
+        [SettingsUISection(kSection, kKeybindingGroup)]
+        public ProxyBinding ToggleOverlayBinding { get; set; }
+
+        [SettingsUISection(kSection, kKeybindingGroup)]
+        public bool ResetBindings
+        {
+            set
+            {
+                Mod.log.Info("Reset key bindings");
+                ResetKeyBindings();
+            }
+        }
+
         [SettingsUIButton]
         [SettingsUISection(kSection, kEconomyGroup)]
         public bool ResetEconomyDefaults
@@ -118,6 +136,23 @@ namespace MarketBasedEconomy
 
             Diagnostics.DiagnosticsLogger.Enabled = false;
             CompanyProfitAdjustmentSystem.FeatureEnabled = false;
+            EconomyAnalyticsConfig.ResetToDefaults();
+        }
+
+        public void EnsureKeyBindingsRegistered()
+        {
+            if (!keyBindingRegistered)
+            {
+                RegisterKeyBindings();
+            }
+
+            ApplyKeyBindings();
+
+            var toggleAction = GetAction(Mod.kToggleOverlayActionName);
+            if (toggleAction != null)
+            {
+                toggleAction.shouldBeEnabled = true;
+            }
         }
     }
 
@@ -136,6 +171,7 @@ namespace MarketBasedEconomy
                 { m_Setting.GetOptionTabLocaleID(Setting.kSection), "Main" },
 
                 { m_Setting.GetOptionGroupLocaleID(Setting.kEconomyGroup), "Economy" },
+                { m_Setting.GetOptionGroupLocaleID(Setting.kKeybindingGroup), "Key bindings" },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ExternalMarketWeight)), "External market weight" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ExternalMarketWeight)), "Blend factor between local supply-demand price and external trade price references." },
@@ -151,6 +187,14 @@ namespace MarketBasedEconomy
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.EducationMismatchPremium)), "Education mismatch wage premium" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.EducationMismatchPremium)), "Additional wage boost when low-skill workers dominate the labor pool." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ToggleOverlayBinding)), "Toggle Analytics Overlay" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ToggleOverlayBinding)), "Keybinding to toggle the analytics overlay display" },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ResetBindings)), "Reset key bindings" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ResetBindings)), "Reset all key bindings of the mod" },
+
+                { m_Setting.GetBindingKeyLocaleID(Mod.kToggleOverlayActionName), "Toggle Overlay" },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ResetEconomyDefaults)), "Reset economy defaults" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ResetEconomyDefaults)), "Restore all economy settings in this mod to their default values." },

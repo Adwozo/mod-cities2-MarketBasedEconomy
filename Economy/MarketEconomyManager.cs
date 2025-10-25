@@ -3,6 +3,7 @@ using Colossal.Logging;
 using Game.Economy;
 using Game.Prefabs;
 using Game.Simulation;
+using MarketBasedEconomy.Analytics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -227,6 +228,8 @@ namespace MarketBasedEconomy.Economy
             float maxPrice = vanillaPrice * MaximumPriceMultiplier;
             float clampedPrice = math.clamp(price, minPrice, maxPrice);
 
+            EconomyAnalyticsRecorder.Instance.RecordPrice(resource, clampedPrice);
+
             if (!skipLogging)
             {
                 Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust {resource}: vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, ratio={ratio:F2}, multiplier={multiplier:F2}, externalBlend={externalBlend:F2}, externalPrice={externalPrice:F2}, result={price:F2}, clamped={clampedPrice:F2}");
@@ -275,6 +278,8 @@ namespace MarketBasedEconomy.Economy
 
             if (component == PriceComponent.Market)
             {
+                EconomyAnalyticsRecorder.Instance.RecordPrice(resource, totalAdjusted);
+
                 if (!skipLogging)
                 {
                     Diagnostics.DiagnosticsLogger.Log(

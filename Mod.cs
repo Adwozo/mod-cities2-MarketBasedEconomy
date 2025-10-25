@@ -6,6 +6,7 @@ using Game.Modding;
 using Game.SceneFlow;
 using Game.Simulation;
 using MarketBasedEconomy.Harmony;
+using MarketBasedEconomy.Analytics;
 using MarketBasedEconomy.Economy;
 using Unity.Burst;
 
@@ -15,7 +16,10 @@ namespace MarketBasedEconomy
     {
         public static ILog log = LogManager.GetLogger($"{nameof(MarketBasedEconomy)}.{nameof(Mod)}").SetShowsErrorsInUI(false);
         private Setting m_Setting;
+        public static Setting m_Setting_Static;
         public const string HarmonyId = "com.andrew.marketbasedeconomy";
+
+        public const string kToggleOverlayActionName = "ToggleAnalyticsOverlay";
 
         public void OnLoad(UpdateSystem updateSystem)
         {
@@ -25,23 +29,28 @@ namespace MarketBasedEconomy
                 log.Info($"Current mod asset at {asset.path}");
 
             m_Setting = new Setting(this);
+            m_Setting_Static = m_Setting;
+            AssetDatabase.global.LoadSettings(nameof(MarketBasedEconomy), m_Setting, new Setting(this));
+            m_Setting.EnsureKeyBindingsRegistered();
             m_Setting.RegisterInOptionsUI();
             GameManager.instance.localizationManager.AddSource("en-US", new LocaleEN(m_Setting));
 
-            AssetDatabase.global.LoadSettings(nameof(MarketBasedEconomy), m_Setting, new Setting(this));
-
             LaborMarketManager.Instance.Reset();
+            EconomyAnalyticsRecorder.Instance.Clear();
             BurstCompiler.Options.EnableBurstCompilation = true;
             updateSystem.UpdateBefore<WageAdjustmentSystem, PayWageSystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateBefore<MarketProductSystem, ResourceExporterSystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateBefore<CompanyProfitAdjustmentSystem, TaxSystem>(SystemUpdatePhase.GameSimulation);
 
+
+            EconomyAnalyticsOverlayHost.Ensure();
             HarmonyBridge.ApplyAll(HarmonyId);
         }
 
         public void OnDispose()
         {
             log.Info(nameof(OnDispose));
+            EconomyAnalyticsOverlayHost.Dispose();
             if (m_Setting != null)
             {
                 m_Setting.UnregisterInOptionsUI();

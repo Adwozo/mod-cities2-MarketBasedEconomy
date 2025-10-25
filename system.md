@@ -52,3 +52,5 @@
 - `MarketTransaction` (buffer element) and `MarketTransactionType` enums provide a standardized payload for supply/demand events.
 - `DiagnosticsLogger` handles opt-in file-based logging under the mod's persistent data directory.
 - `EconomyOverrides` placeholder for finance-related hooks (currently empty).
+- `EconomyAnalyticsRecorder` caches the latest wage levels and per-resource price samples so the custom overlay can graph them without touching the vanilla statistics pipeline.
+- `EconomyAnalyticsOverlay` is an IMGUI panel (toggled via the configurable hotkey; Shift requirement optional) with separate Live, Wages, and Prices tabs. It renders live wage snapshots, offers per-education-level visibility toggles for wage graphs, and presents a scrollable product price index alongside adjustable windows, dynamic axes, live markers, and resource filtering. `EconomyAnalyticsOverlayHost` manages its lifecycle while `EconomyAnalyticsHotkey` listens for the configured shortcut and captures rebinding requests.

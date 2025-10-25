@@ -161,6 +161,8 @@ namespace MarketBasedEconomy.Economy
                     float maxPrice = vanillaPrice * manager.MaximumPriceMultiplier;
                     adjustedPrice = math.clamp(adjustedPrice, minPrice, maxPrice);
 
+                    Analytics.EconomyAnalyticsRecorder.Instance.RecordPrice(outputResource, adjustedPrice);
+
                     int weightedRevenue = Mathf.RoundToInt(adjustedPrice * saleAmount);
                     if (weightedRevenue <= 0)
                     {
