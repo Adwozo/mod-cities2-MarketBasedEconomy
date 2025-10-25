@@ -117,12 +117,12 @@ namespace MarketBasedEconomy.Economy
         /// <summary>
         /// Prevent runaway prices by clamping multipliers.
         /// </summary>
-        public float MinimumPriceMultiplier { get; set; } = 0.8f;
+        public float MinimumPriceMultiplier { get; set; } = 0.5f;
 
         /// <summary>
         /// Prevent runaway prices by clamping multipliers.
         /// </summary>
-        public float MaximumPriceMultiplier { get; set; } = 1.2f;
+        public float MaximumPriceMultiplier { get; set; } = 1.5f;
 
         /// <summary>
         /// Controls how aggressively the system reacts to demand imbalance. Range [0,1].
@@ -196,6 +196,16 @@ namespace MarketBasedEconomy.Economy
                 {
                     Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust skipped for {resource}: vanilla={vanillaPrice:F2}.");
                 }
+                return vanillaPrice;
+            }
+
+            if (IsZeroWeightResource(resource))
+            {
+                if (!skipLogging)
+                {
+                    Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust skipped for zero-weight {resource}; using vanilla price {vanillaPrice:F2}.");
+                }
+
                 return vanillaPrice;
             }
 
@@ -521,6 +531,34 @@ namespace MarketBasedEconomy.Economy
             }
 
             return external;
+        }
+
+        private bool IsZeroWeightResource(Resource resource)
+        {
+            var resourceSystem = GetResourceSystem();
+            var world = World.DefaultGameObjectInjectionWorld;
+
+            if (resourceSystem == null || world == null)
+            {
+                return false;
+            }
+
+            var resourcePrefabs = resourceSystem.GetPrefabs();
+            Entity resourceEntity = resourcePrefabs[resource];
+
+            if (resourceEntity == Entity.Null)
+            {
+                return false;
+            }
+
+            var entityManager = world.EntityManager;
+            if (!entityManager.HasComponent<ResourceData>(resourceEntity))
+            {
+                return false;
+            }
+
+            var data = entityManager.GetComponentData<ResourceData>(resourceEntity);
+            return data.m_Weight <= 0f;
         }
 
         private uint GetCurrentTick()

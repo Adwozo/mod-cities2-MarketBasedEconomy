@@ -114,14 +114,13 @@ namespace MarketBasedEconomy.Economy
 
                     if (isZeroWeight)
                     {
-                        float unitPrice = manager.AdjustPriceComponent(
-                            outputResource,
-                            sanitizedIndustrialPrice,
-                            sanitizedServicePrice,
-                            MarketEconomyManager.PriceComponent.Market,
-                            skipLogging: false);
+                        float vanillaUnitPrice = sanitizedIndustrialPrice + sanitizedServicePrice;
+                        if (vanillaUnitPrice <= 0f)
+                        {
+                            return;
+                        }
 
-                        int revenue = Mathf.RoundToInt(unitPrice * saleAmount);
+                        int revenue = Mathf.RoundToInt(vanillaUnitPrice * saleAmount);
                         if (revenue <= 0)
                         {
                             return;
@@ -130,12 +129,9 @@ namespace MarketBasedEconomy.Economy
                         EconomyUtils.AddResources(outputResource, -saleAmount, resources);
                         EconomyUtils.AddResources(Resource.Money, revenue, resources);
 
-                        manager.RegisterSupply(outputResource, saleAmount);
-                        manager.RegisterDemand(outputResource, saleAmount);
-
                         Diagnostics.DiagnosticsLogger.Log(
                             "Economy",
-                            $"Virtual sale for {outputResource}: amount={saleAmount}, unit={unitPrice:F2}, revenue={revenue}");
+                            $"Virtual sale for {outputResource}: amount={saleAmount}, vanillaUnit={vanillaUnitPrice:F2}, revenue={revenue}");
                         return;
                     }
 
