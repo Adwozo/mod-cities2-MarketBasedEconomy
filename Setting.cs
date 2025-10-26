@@ -52,6 +52,15 @@ namespace MarketBasedEconomy
             set => MarketEconomyManager.Instance.ExternalPriceInfluence = math.clamp(value, 0f, 1f);
         }
 
+        [SettingsUISlider(min = 0f, max = 1f, step = 0.05f)]
+        [SettingsUICustomFormat(fractionDigits = 2, separateThousands = false, maxValueWithFraction = 1f)]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public float MarketSensitivity
+        {
+            get => MarketEconomyManager.Instance.Sensitivity;
+            set => MarketEconomyManager.Instance.Sensitivity = math.clamp(value, 0f, 1f);
+        }
+
         [SettingsUISlider(min = 0.1f, max = 0.75f, step = 0.05f)]
         [SettingsUICustomFormat(fractionDigits = 2, separateThousands = false, maxValueWithFraction = 1f)]
         [SettingsUISection(kSection, kEconomyGroup)]
@@ -125,6 +134,8 @@ namespace MarketBasedEconomy
             marketManager.MaximumPriceMultiplier = 2.5f;
             marketManager.Sensitivity = 0.65f;
             marketManager.ExternalPriceInfluence = 0.35f;
+            marketManager.PriceAnchoringStrength = 0.1f;
+            marketManager.LogisticSmoothingScale = 0.5f;
 
             var workforceManager = WorkforceUtilizationManager.Instance;
             workforceManager.MinimumUtilizationShare = 0.25f;
@@ -175,6 +186,9 @@ namespace MarketBasedEconomy
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ExternalMarketWeight)), "External market weight" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ExternalMarketWeight)), "Blend factor between local supply-demand price and external trade price references." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MarketSensitivity)), "Market sensitivity" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MarketSensitivity)), "Controls how strongly prices react to supply and demand imbalances." },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MinimumUtilizationShare)), "Minimum utilization" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.MinimumUtilizationShare)), "A fraction of the building employee capacity set as the company minimum staffed required." },

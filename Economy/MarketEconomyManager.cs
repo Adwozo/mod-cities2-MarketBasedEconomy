@@ -154,11 +154,134 @@ namespace MarketBasedEconomy.Economy
         /// </summary>
         public float DemandTolerance { get; set; } = 0.05f;
 
+        /// <summary>
+        /// Anchoring weight applied to pull elastic prices back toward the vanilla reference. Range [0,1].
+        /// </summary>
+        public float PriceAnchoringStrength { get; set; } = 0.1f;
+
+        /// <summary>
+        /// Controls how quickly prices ease into the transport-cost band edges. Range (0,1].
+        /// </summary>
+        public float LogisticSmoothingScale { get; set; } = 0.5f;
+
         public enum PriceComponent
         {
             Market,
             Industrial,
             Service
+        }
+
+        public readonly struct ElasticPriceMetrics
+        {
+            public ElasticPriceMetrics(
+                float ratio,
+                float exponent,
+                float anchoring,
+                float smoothing,
+                float bias,
+                float minPrice,
+                float maxPrice,
+                float elasticPrice,
+                float blendedPrice,
+                float finalPrice,
+                float rawPrice,
+                float anchoredPrice)
+            {
+                Ratio = ratio;
+                Exponent = exponent;
+                Anchoring = anchoring;
+                Smoothing = smoothing;
+                Bias = bias;
+                MinPrice = minPrice;
+                MaxPrice = maxPrice;
+                ElasticPrice = elasticPrice;
+                BlendedPrice = blendedPrice;
+                FinalPrice = finalPrice;
+                RawPrice = rawPrice;
+                AnchoredPrice = anchoredPrice;
+            }
+
+            public float Ratio { get; }
+            public float Exponent { get; }
+            public float Anchoring { get; }
+            public float Smoothing { get; }
+            public float Bias { get; }
+            public float MinPrice { get; }
+            public float MaxPrice { get; }
+            public float ElasticPrice { get; }
+            public float BlendedPrice { get; }
+            public float FinalPrice { get; }
+            public float RawPrice { get; }
+            public float AnchoredPrice { get; }
+        }
+
+        public float ComputeElasticPrice(Resource resource, float vanillaPrice, float supply, float demand, bool skipLogging, out ElasticPriceMetrics metrics)
+        {
+            float sanitizedVanilla = math.max(0f, vanillaPrice);
+            float smoothing = math.clamp(LogisticSmoothingScale, 0.05f, 1f);
+
+            if (resource == Resource.Money || sanitizedVanilla <= 0f)
+            {
+                metrics = new ElasticPriceMetrics(1f, 0f, PriceAnchoringStrength, smoothing, 0f, sanitizedVanilla, sanitizedVanilla, sanitizedVanilla, sanitizedVanilla, sanitizedVanilla, sanitizedVanilla, sanitizedVanilla);
+                return sanitizedVanilla;
+            }
+
+            float sanitizedSupply = math.max(1f, supply);
+            float sanitizedDemand = math.max(1f, demand);
+            float ratio = sanitizedDemand / sanitizedSupply;
+
+            float sensitivity = math.clamp(Sensitivity, 0f, 1f);
+            float exponent = math.lerp(0.25f, 3f, sensitivity);
+            float rawPrice = sanitizedVanilla * math.pow(ratio, exponent);
+
+            float anchoring = math.clamp(PriceAnchoringStrength, 0f, 1f);
+            float anchoredPrice = math.lerp(rawPrice, sanitizedVanilla, anchoring);
+
+            float minMultiplier = math.max(0f, MinimumPriceMultiplier);
+            float maxMultiplier = math.max(0f, MaximumPriceMultiplier);
+            if (maxMultiplier < minMultiplier)
+            {
+                float swapMultiplier = minMultiplier;
+                minMultiplier = maxMultiplier;
+                maxMultiplier = swapMultiplier;
+            }
+
+            float minPrice = sanitizedVanilla * minMultiplier;
+            float maxPrice = sanitizedVanilla * maxMultiplier;
+            if (maxPrice < minPrice)
+            {
+                float swapPrice = minPrice;
+                minPrice = maxPrice;
+                maxPrice = swapPrice;
+            }
+
+            float bandWidth = math.max(1e-3f, maxPrice - minPrice);
+            float halfBand = 0.5f * bandWidth;
+            float baselineNormalized = math.clamp((sanitizedVanilla - minPrice) / bandWidth, 1e-3f, 1f - 1e-3f);
+            float bias = math.log(baselineNormalized / (1f - baselineNormalized));
+
+            float denominator = math.max(1e-3f, smoothing * halfBand);
+            float logisticArg = (anchoredPrice - sanitizedVanilla) / denominator;
+            float logisticInput = math.clamp(logisticArg + bias, -60f, 60f);
+            float sigma = 1f / (1f + math.exp(-logisticInput));
+
+            float elasticPrice = minPrice + bandWidth * sigma;
+            float externalBlend = math.clamp(ExternalPriceInfluence, 0f, 1f);
+            float blendedPrice = math.lerp(elasticPrice, sanitizedVanilla, externalBlend);
+            float finalPrice = math.clamp(blendedPrice, minPrice, maxPrice);
+
+            metrics = new ElasticPriceMetrics(ratio, exponent, anchoring, smoothing, bias, minPrice, maxPrice, elasticPrice, blendedPrice, finalPrice, rawPrice, anchoredPrice);
+
+            EconomyAnalyticsRecorder.Instance.RecordPrice(resource, finalPrice);
+
+            if (!skipLogging)
+            {
+                Diagnostics.DiagnosticsLogger.Log(
+                    "Economy",
+                    $"Elastic price for {resource}: vanilla={sanitizedVanilla:F2}, supply={sanitizedSupply:F1}, demand={sanitizedDemand:F1}, ratio={ratio:F3}, exponent={exponent:F2}, anchor={anchoring:F2}, smoothing={smoothing:F2}, bias={bias:F2}, raw={rawPrice:F2}, anchored={anchoredPrice:F2}, elastic={elasticPrice:F2}, blended={blendedPrice:F2}, final={finalPrice:F2}");
+            }
+
+            return finalPrice;
         }
 
         /// <summary>
@@ -220,36 +343,8 @@ namespace MarketBasedEconomy.Economy
                 return vanillaPrice;
             }
 
-            supply = math.max(1f, supply);
-            demand = math.max(1f, demand);
-            float rawRatio = demand / supply;
-            float sensitivity = math.clamp(Sensitivity, 0f, 1f);
-            float ratio = sensitivity > 0f ? math.pow(rawRatio, sensitivity) : 1f;
-            float multiplier = math.clamp(ratio, MinimumPriceMultiplier, MaximumPriceMultiplier);
-
-            float marketPrice = vanillaPrice * multiplier;
-
-            float externalBlend = math.clamp(ExternalPriceInfluence, 0f, 1f);
-            float blendedPrice = marketPrice;
-            if (externalBlend > 0f)
-            {
-                blendedPrice = math.lerp(marketPrice, vanillaPrice, externalBlend);
-            }
-
-            float minPrice = vanillaPrice * MinimumPriceMultiplier;
-            float maxPrice = vanillaPrice * MaximumPriceMultiplier;
-            float clampedPrice = math.clamp(blendedPrice, minPrice, maxPrice);
-
-            EconomyAnalyticsRecorder.Instance.RecordPrice(resource, clampedPrice);
-
-            if (!skipLogging)
-            {
-                Diagnostics.DiagnosticsLogger.Log(
-                    "Economy",
-            $"Price adjust {resource}: vanilla={vanillaPrice:F2}, supply={supply:F1}, demand={demand:F1}, rawRatio={rawRatio:F2}, sensitivity={sensitivity:F2}, multiplier={multiplier:F2}, blend={externalBlend:F2}, market={marketPrice:F2}, blended={blendedPrice:F2}, clamped={clampedPrice:F2}");
-            }
-
-            return clampedPrice;
+            float finalPrice = ComputeElasticPrice(resource, vanillaPrice, supply, demand, skipLogging, out _);
+            return finalPrice;
         }
 
         /// <summary>
