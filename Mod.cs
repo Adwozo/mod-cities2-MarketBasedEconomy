@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using Colossal.IO.AssetDatabase;
 using Colossal.Logging;
 using Game;
@@ -21,12 +22,21 @@ namespace MarketBasedEconomy
 
         public const string kToggleOverlayActionName = "ToggleAnalyticsOverlay";
 
+        public static string ModDirectory { get; private set; }
+
         public void OnLoad(UpdateSystem updateSystem)
         {
             log.Info(nameof(OnLoad));
 
             if (GameManager.instance.modManager.TryGetExecutableAsset(this, out var asset))
+            {
                 log.Info($"Current mod asset at {asset.path}");
+                ModDirectory = Path.GetDirectoryName(asset.path);
+            }
+            else
+            {
+                ModDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            }
 
             m_Setting = new Setting(this);
             m_Setting_Static = m_Setting;
@@ -42,6 +52,9 @@ namespace MarketBasedEconomy
             updateSystem.UpdateBefore<MarketProductSystem, ResourceExporterSystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateBefore<CompanyProfitAdjustmentSystem, TaxSystem>(SystemUpdatePhase.GameSimulation);
 
+            RealWorldBaselineFeature.Initialize(updateSystem);
+            RealWorldBaselineFeature.Refresh();
+
 
             EconomyAnalyticsOverlayHost.Ensure();
             HarmonyBridge.ApplyAll(HarmonyId);
@@ -56,6 +69,8 @@ namespace MarketBasedEconomy
                 m_Setting.UnregisterInOptionsUI();
                 m_Setting = null;
             }
+
+            RealWorldBaselineFeature.Dispose();
 
             // No explicit unpatch via reflection; safe to leave patched during game session.
         }

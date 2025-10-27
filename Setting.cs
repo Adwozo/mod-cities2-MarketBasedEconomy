@@ -37,6 +37,28 @@ namespace MarketBasedEconomy
             }
         }
 
+        private bool m_EnableRealWorldBaselines;
+
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public bool EnableRealWorldBaselines
+        {
+            get => m_EnableRealWorldBaselines;
+            set
+            {
+                if (m_EnableRealWorldBaselines == value)
+                {
+                    if (value)
+                    {
+                        RealWorldBaselineFeature.Refresh();
+                    }
+                    return;
+                }
+
+                m_EnableRealWorldBaselines = value;
+                RealWorldBaselineFeature.Enabled = value;
+            }
+        }
+
         [SettingsUISection(kSection, kEconomyGroup)]
         public bool EnableCompanyTaxAdjustments
         {
@@ -145,6 +167,7 @@ namespace MarketBasedEconomy
             laborManager.SkillShortagePremium = 0.8f;
             laborManager.EducationMismatchPremium = 0.2f;
 
+            EnableRealWorldBaselines = false;
             Diagnostics.DiagnosticsLogger.Enabled = false;
             CompanyProfitAdjustmentSystem.FeatureEnabled = false;
             EconomyAnalyticsConfig.ResetToDefaults();
@@ -218,6 +241,9 @@ namespace MarketBasedEconomy
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.EnableCompanyTaxAdjustments)), "Enable company tax adjustments (Experimental Large Performance Impact)" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.EnableCompanyTaxAdjustments)), "Apply the experimental profit-based tax recalculation (Experimental Large Performance Impact)." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.EnableRealWorldBaselines)), "Use real-world baseline data" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.EnableRealWorldBaselines)), "Reset resource prices and company productivity using Config/RealWorldBaseline.json when the simulation loads." },
             };
         }
 

@@ -21,19 +21,22 @@ namespace MarketBasedEconomy.Economy
     [UpdateBefore(typeof(ResourceBuyerSystem))]
     public partial class MarketProductSystem : SystemBase
     {
-        private const int kUpdatesPerDay = 32;
-        private const int kMinSaleAmount = 20;
-        private const int kMaxSalePerTick = 1000;
+    private const int kUpdatesPerDay = 32;
+    private const int kMinSaleAmount = 20;
+    private const int kMaxSalePerTick = 1000;
+    private const float kDefaultOutputPerWorkerPerDay = 6f;
 
         private ResourceSystem m_ResourceSystem;
         private SimulationSystem m_SimulationSystem;
         private EntityQuery m_CompanyQuery;
+    private BufferLookup<Employee> m_EmployeeLookup;
 
         protected override void OnCreate()
         {
             base.OnCreate();
             m_ResourceSystem = World.GetOrCreateSystemManaged<ResourceSystem>();
             m_SimulationSystem = World.GetOrCreateSystemManaged<SimulationSystem>();
+            m_EmployeeLookup = GetBufferLookup<Employee>(true);
 
             m_CompanyQuery = GetEntityQuery(
                 ComponentType.ReadOnly<Game.Companies.ProcessingCompany>(),
@@ -58,6 +61,12 @@ namespace MarketBasedEconomy.Economy
             ResourcePrefabs resourcePrefabs = m_ResourceSystem.GetPrefabs();
             var resourceDatas = GetComponentLookup<ResourceData>(true);
             var processLookup = GetComponentLookup<IndustrialProcessData>(true);
+            m_EmployeeLookup.Update(this);
+
+            using var activeCompanies = m_CompanyQuery.ToEntityArray(Allocator.TempJob);
+            var productionTracker = CompanyProductionTracker.Instance;
+            productionTracker.Prune(activeCompanies);
+            var employeeLookup = m_EmployeeLookup;
 
             Entities
                 .WithName("MarketProductSale")
@@ -65,6 +74,7 @@ namespace MarketBasedEconomy.Economy
                 .WithReadOnly(resourcePrefabs)
                 .WithReadOnly(resourceDatas)
                 .WithReadOnly(processLookup)
+                .WithReadOnly(employeeLookup)
                 .WithoutBurst() // managed helpers + diagnostics
                 .ForEach((Entity entity,
                           DynamicBuffer<Game.Economy.Resources> resources,
@@ -96,13 +106,33 @@ namespace MarketBasedEconomy.Economy
                     float sanitizedIndustrialPrice = math.max(0f, resourceData.m_Price.x);
                     float sanitizedServicePrice = math.max(0f, resourceData.m_Price.y);
 
+                    int employeeCount = employeeLookup.HasBuffer(entity) ? employeeLookup[entity].Length : 0;
+                    float configuredOutputPerWorker = kDefaultOutputPerWorkerPerDay;
+                    if (RealWorldBaselineState.TryGetOutputPerWorker(outputResource, out float configuredOutput))
+                    {
+                        configuredOutputPerWorker = math.max(0.1f, configuredOutput);
+                    }
+
+                    float desiredProductionPerTick = 0f;
+                    if (employeeCount > 0 && configuredOutputPerWorker > 0f)
+                    {
+                        desiredProductionPerTick = (employeeCount * configuredOutputPerWorker) / kUpdatesPerDay;
+                    }
+
+                    int producedThisTick = productionTracker.AccumulateProduction(entity, desiredProductionPerTick);
+                    if (producedThisTick > 0)
+                    {
+                        EconomyUtils.AddResources(outputResource, producedThisTick, resources);
+                    }
+
                     int available = EconomyUtils.GetResources(outputResource, resources);
                     if (available < kMinSaleAmount)
                     {
                         return;
                     }
 
-                    int batch = math.max(processData.m_Output.m_Amount, kMinSaleAmount);
+                    int desiredBatch = (int)math.ceil(math.max(desiredProductionPerTick, producedThisTick));
+                    int batch = math.max(math.max(processData.m_Output.m_Amount, desiredBatch), kMinSaleAmount);
                     int saleAmount = math.clamp(available, kMinSaleAmount, kMaxSalePerTick);
                     saleAmount = math.min(saleAmount, batch);
                     if (saleAmount <= 0)

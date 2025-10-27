@@ -1,0 +1,79 @@
+{
+  "priceScale": 1.0,
+  "baseConsumptionScale": 1.0,
+  "minimumPrice": 0.5,
+  "resources": {
+    "Grain": { "price": 200.0, "outputPerWorkerPerDay": 3.0 },
+    "Vegetables": { "price": 800.0, "outputPerWorkerPerDay": 2.0 },
+    "Livestock": { "price": 2500.0, "outputPerWorkerPerDay": 0.3 },
+    "Fish": { "price": 2000.0, "outputPerWorkerPerDay": 1.0 },
+
+    "Food": { "price": 1500.0, "outputPerWorkerPerDay": 6.0 },
+    "ConvenienceFood": { "price": 2500.0, "outputPerWorkerPerDay": 5.0 },
+    "Meals": { "price": 10000.0, "outputPerWorkerPerDay": 0.2 },
+    "Beverages": { "price": 900.0, "outputPerWorkerPerDay": 8.0 },
+
+    "Wood": { "price": 80.0, "outputPerWorkerPerDay": 18.0 },
+    "Timber": { "price": 220.0, "outputPerWorkerPerDay": 12.0 },
+    "Paper": { "price": 700.0, "outputPerWorkerPerDay": 8.0 },
+    "Furniture": { "price": 3000.0, "outputPerWorkerPerDay": 1.0 },
+
+    "Ore": { "price": 60.0, "outputPerWorkerPerDay": 18.0 },
+    "Coal": { "price": 50.0, "outputPerWorkerPerDay": 22.0 },
+    "Stone": { "price": 12.0, "outputPerWorkerPerDay": 24.0 },
+    "Oil": { "price": 550.0, "outputPerWorkerPerDay": 8.0 },
+    "Petrochemicals": { "price": 800.0, "outputPerWorkerPerDay": 8.0 },
+    "Plastics": { "price": 1400.0, "outputPerWorkerPerDay": 7.0 },
+    "Metals": { "price": 2000.0, "outputPerWorkerPerDay": 6.0 },
+    "Steel": { "price": 800.0, "outputPerWorkerPerDay": 5.0 },
+    "Concrete": { "price": 100.0, "outputPerWorkerPerDay": 9.0 },
+    "Minerals": { "price": 400.0, "outputPerWorkerPerDay": 10.0 },
+    "Chemicals": { "price": 900.0, "outputPerWorkerPerDay": 6.0 },
+    "Pharmaceuticals": { "price": 40000.0, "outputPerWorkerPerDay": 0.1 },
+
+    "Cotton": { "price": 1800.0, "outputPerWorkerPerDay": 2.0 },
+    "Textiles": { "price": 2500.0, "outputPerWorkerPerDay": 4.0 },
+
+    "Machinery": { "price": 6000.0, "outputPerWorkerPerDay": 0.6 },
+    "Vehicles": { "price": 15000.0, "outputPerWorkerPerDay": 0.2 },
+    "Electronics": { "price": 30000.0, "outputPerWorkerPerDay": 0.2 },
+    "Software": { "price": 800.0, "outputPerWorkerPerDay": 5.0 },
+
+    "Lodging": { "price": 400.0, "outputPerWorkerPerDay": 3.0 },
+    "Telecom": { "price": 600.0, "outputPerWorkerPerDay": 4.0 },
+    "Financial": { "price": 1000.0, "outputPerWorkerPerDay": 4.0 },
+    "Media": { "price": 500.0, "outputPerWorkerPerDay": 5.0 },
+    "Entertainment": { "price": 500.0, "outputPerWorkerPerDay": 4.0 },
+    "Recreation": { "price": 400.0, "outputPerWorkerPerDay": 4.0 },
+
+    "Garbage": { "price": 40.0, "outputPerWorkerPerDay": 25.0 }
+  },
+  "companies": {
+    "serviceWorkPerUnitMultiplier": 1.15,
+    "industrialWorkPerUnitMultiplier": 1.05,
+    "extractorWorkPerUnitMultiplier": 0.9,
+    "defaultOutputPerWorkerPerDay": 6.0,
+    "prefabs": {
+      "Commercial_FastFood": { "workPerUnitMultiplier": 1.2 },
+      "Commercial_SupermarketLarge": { "workPerUnitMultiplier": 1.15 },
+      "Industrial_BioRefinery": { "workPerUnitMultiplier": 0.85 },
+      "Industrial_SteelMill": { "workPerUnitMultiplier": 0.9 },
+      "Extractor_OilRig": { "workPerUnitMultiplier": 0.8 }
+    }
+  },
+  "household": {
+    "resourceConsumption": 1.1,
+    "touristConsumptionMultiplier": 1.35,
+    "residentialMinimumEarnings": 1200,
+    "familyAllowance": 450,
+    "pension": 1600,
+    "unemploymentBenefit": 900
+  },
+  "wages": {
+    "level0": 1500,
+    "level1": 2300,
+    "level2": 3200,
+    "level3": 4500,
+    "level4": 6200
+  }
+}
