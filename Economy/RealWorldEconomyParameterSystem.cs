@@ -73,6 +73,7 @@ namespace MarketBasedEconomy.Economy
 
             using var entities = m_EconomyQuery.ToEntityArray(Allocator.TempJob);
             int adjustments = 0;
+            bool resetLaborBaseline = false;
 
             foreach (var entity in entities)
             {
@@ -86,12 +87,18 @@ namespace MarketBasedEconomy.Economy
                 {
                     EntityManager.SetComponentData(entity, data);
                     adjustments++;
+                    resetLaborBaseline = true;
                 }
 
                 RealWorldBaselineState.RecordAppliedEconomy(data);
             }
 
             Mod.log.Info($"RealWorldBaseline: updated economy parameters for {adjustments} entries.");
+
+            if (resetLaborBaseline)
+            {
+                LaborMarketManager.Instance.Reset();
+            }
 
             m_Pending = false;
             Enabled = false;

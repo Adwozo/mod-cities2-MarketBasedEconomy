@@ -103,8 +103,11 @@ namespace MarketBasedEconomy.Economy
                     ResourceData resourceData = resourceDatas[resourceEntity];
                     bool isZeroWeight = resourceData.m_Weight == 0;
 
-                    float sanitizedIndustrialPrice = math.max(0f, resourceData.m_Price.x);
-                    float sanitizedServicePrice = math.max(0f, resourceData.m_Price.y);
+                    var manager = MarketEconomyManager.Instance;
+
+                    float industrialPrice = math.max(0f, resourceData.m_Price.x);
+                    float servicePrice = math.max(0f, resourceData.m_Price.y);
+                    float baselinePrice = manager.AlignComponentsToBaseline(outputResource, ref industrialPrice, ref servicePrice);
 
                     int employeeCount = employeeLookup.HasBuffer(entity) ? employeeLookup[entity].Length : 0;
                     float configuredOutputPerWorker = kDefaultOutputPerWorkerPerDay;
@@ -140,17 +143,14 @@ namespace MarketBasedEconomy.Economy
                         return;
                     }
 
-                    var manager = MarketEconomyManager.Instance;
-
                     if (isZeroWeight)
                     {
-                        float vanillaUnitPrice = sanitizedIndustrialPrice + sanitizedServicePrice;
-                        if (vanillaUnitPrice <= 0f)
+                        if (baselinePrice <= 0f)
                         {
                             return;
                         }
 
-                        int revenue = Mathf.RoundToInt(vanillaUnitPrice * saleAmount);
+                        int revenue = Mathf.RoundToInt(baselinePrice * saleAmount);
                         if (revenue <= 0)
                         {
                             return;
@@ -161,12 +161,11 @@ namespace MarketBasedEconomy.Economy
 
                         Diagnostics.DiagnosticsLogger.Log(
                             "Economy",
-                            $"Virtual sale for {outputResource}: amount={saleAmount}, vanillaUnit={vanillaUnitPrice:F2}, revenue={revenue}");
+                            $"Virtual sale for {outputResource}: amount={saleAmount}, baselineUnit={baselinePrice:F2}, revenue={revenue}");
                         return;
                     }
 
-                    float vanillaPrice = sanitizedIndustrialPrice + sanitizedServicePrice;
-                    if (vanillaPrice <= 0f)
+                    if (baselinePrice <= 0f)
                     {
                         return;
                     }
@@ -183,8 +182,8 @@ namespace MarketBasedEconomy.Economy
                     float sanitizedDemand = math.max(1f, demand);
 
                     MarketEconomyManager.ElasticPriceMetrics metrics;
-                    float finalPrice = manager.ComputeElasticPrice(outputResource, vanillaPrice, sanitizedSupply, sanitizedDemand, skipLogging: true, out metrics);
-                    float multiplier = vanillaPrice > 0f ? finalPrice / vanillaPrice : 1f;
+                    float finalPrice = manager.ComputeElasticPrice(outputResource, baselinePrice, sanitizedSupply, sanitizedDemand, skipLogging: true, out metrics);
+                    float multiplier = baselinePrice > 0f ? finalPrice / baselinePrice : 1f;
 
                     int weightedRevenue = Mathf.RoundToInt(finalPrice * saleAmount);
                     if (weightedRevenue <= 0)
@@ -200,7 +199,7 @@ namespace MarketBasedEconomy.Economy
 
                     Diagnostics.DiagnosticsLogger.Log(
                         "Economy",
-                        $"Market sale for {outputResource}: weight={resourceData.m_Weight}, available={available}, sale={saleAmount}, vanilla={vanillaPrice:F2}, supply={sanitizedSupply:F1}, demand={sanitizedDemand:F1}, ratio={metrics.Ratio:F3}, exponent={metrics.Exponent:F2}, anchor={metrics.Anchoring:F2}, smoothing={metrics.Smoothing:F2}, bias={metrics.Bias:F2}, raw={metrics.RawPrice:F2}, anchored={metrics.AnchoredPrice:F2}, elastic={metrics.ElasticPrice:F2}, blended={metrics.BlendedPrice:F2}, finalMultiplier={multiplier:F3}, finalPrice={finalPrice:F2}, revenue={weightedRevenue}");
+                        $"Market sale for {outputResource}: weight={resourceData.m_Weight}, available={available}, sale={saleAmount}, baseline={baselinePrice:F2}, supply={sanitizedSupply:F1}, demand={sanitizedDemand:F1}, ratio={metrics.Ratio:F3}, exponent={metrics.Exponent:F2}, anchor={metrics.Anchoring:F2}, smoothing={metrics.Smoothing:F2}, bias={metrics.Bias:F2}, raw={metrics.RawPrice:F2}, anchored={metrics.AnchoredPrice:F2}, elastic={metrics.ElasticPrice:F2}, blended={metrics.BlendedPrice:F2}, finalMultiplier={multiplier:F3}, finalPrice={finalPrice:F2}, revenue={weightedRevenue}");
                 })
                 .Run();
         }

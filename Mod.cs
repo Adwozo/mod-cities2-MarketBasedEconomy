@@ -8,6 +8,7 @@ using Game.SceneFlow;
 using Game.Simulation;
 using MarketBasedEconomy.Harmony;
 using MarketBasedEconomy.Analytics;
+using MarketBasedEconomy.Diagnostics;
 using MarketBasedEconomy.Economy;
 using Unity.Burst;
 
@@ -40,6 +41,8 @@ namespace MarketBasedEconomy
 
             m_Setting = new Setting(this);
             m_Setting_Static = m_Setting;
+
+            ProductChainLoggingFeature.Initialize(updateSystem);
             AssetDatabase.global.LoadSettings(nameof(MarketBasedEconomy), m_Setting, new Setting(this));
             m_Setting.EnsureKeyBindingsRegistered();
             m_Setting.RegisterInOptionsUI();

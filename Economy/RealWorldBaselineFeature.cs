@@ -68,6 +68,7 @@ namespace MarketBasedEconomy.Economy
             updateSystem.UpdateAt<RealWorldResourceInitializerSystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateAt<RealWorldCompanyInitializerSystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateAt<RealWorldEconomyParameterSystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateBefore<RealWorldEconomyParameterSystem, WageAdjustmentSystem>(SystemUpdatePhase.GameSimulation);
 
             s_Initialized = true;
             if (s_Enabled)

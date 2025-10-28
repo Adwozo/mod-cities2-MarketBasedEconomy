@@ -117,12 +117,7 @@ namespace MarketBasedEconomy.Economy
         /// <summary>
         /// Prevent runaway prices by clamping multipliers.
         /// </summary>
-        public float MinimumPriceMultiplier { get; set; } = 0.5f;
-
-        /// <summary>
-        /// Prevent runaway prices by clamping multipliers.
-        /// </summary>
-        public float MaximumPriceMultiplier { get; set; } = 1.5f;
+        public float MaximumPriceMultiplier { get; set; } = 0.2f;
 
         /// <summary>
         /// Controls how aggressively the system reacts to demand imbalance. Range [0,1].
@@ -132,7 +127,7 @@ namespace MarketBasedEconomy.Economy
         /// <summary>
         /// How strongly external trade pricing influences local market prices. Range [0,1].
         /// </summary>
-        public float ExternalPriceInfluence { get; set; } = 0.35f;
+        public float ExternalPriceInfluence { get; set; } = 0.6f;
 
         /// <summary>
         /// Extra multiplier applied to the industrial (production) portion of the price once the market multiplier is computed.
@@ -163,6 +158,69 @@ namespace MarketBasedEconomy.Economy
         /// Controls how quickly prices ease into the transport-cost band edges. Range (0,1].
         /// </summary>
         public float LogisticSmoothingScale { get; set; } = 0.5f;
+
+        private float ResolveBaselinePrice(Resource resource, float fallbackPrice)
+        {
+            float sanitizedFallback = math.max(0f, fallbackPrice);
+
+            if (resource == Resource.Money || resource == Resource.NoResource)
+            {
+                return sanitizedFallback;
+            }
+
+            if (!RealWorldBaselineFeature.Enabled)
+            {
+                return sanitizedFallback;
+            }
+
+            if (RealWorldBaselineState.TryGetAppliedPrice(resource, out float baseline) && baseline > 0f)
+            {
+                return baseline;
+            }
+
+            return sanitizedFallback;
+        }
+
+        public float GetBaselinePrice(Resource resource, float fallbackPrice)
+        {
+            return ResolveBaselinePrice(resource, fallbackPrice);
+        }
+
+        public float AlignComponentsToBaseline(Resource resource, ref float industrialComponent, ref float serviceComponent)
+        {
+            float sanitizedIndustrial = math.max(0f, industrialComponent);
+            float sanitizedService = math.max(0f, serviceComponent);
+            float vanillaTotal = sanitizedIndustrial + sanitizedService;
+
+            if (resource == Resource.Money || resource == Resource.NoResource)
+            {
+                industrialComponent = sanitizedIndustrial;
+                serviceComponent = sanitizedService;
+                return vanillaTotal;
+            }
+
+            float baselineTotal = ResolveBaselinePrice(resource, vanillaTotal);
+
+            if (baselineTotal <= 0f)
+            {
+                industrialComponent = sanitizedIndustrial;
+                serviceComponent = sanitizedService;
+                return vanillaTotal;
+            }
+
+            if (vanillaTotal <= 1e-4f)
+            {
+                float half = baselineTotal * 0.5f;
+                industrialComponent = half;
+                serviceComponent = baselineTotal - half;
+                return baselineTotal;
+            }
+
+            float scale = baselineTotal / vanillaTotal;
+            industrialComponent = sanitizedIndustrial * scale;
+            serviceComponent = sanitizedService * scale;
+            return baselineTotal;
+        }
 
         public enum PriceComponent
         {
@@ -217,7 +275,8 @@ namespace MarketBasedEconomy.Economy
 
         public float ComputeElasticPrice(Resource resource, float vanillaPrice, float supply, float demand, bool skipLogging, out ElasticPriceMetrics metrics)
         {
-            float sanitizedVanilla = math.max(0f, vanillaPrice);
+            float baselinePrice = ResolveBaselinePrice(resource, vanillaPrice);
+            float sanitizedVanilla = math.max(0f, baselinePrice);
             float smoothing = math.clamp(LogisticSmoothingScale, 0.05f, 1f);
 
             if (resource == Resource.Money || sanitizedVanilla <= 0f)
@@ -237,8 +296,8 @@ namespace MarketBasedEconomy.Economy
             float anchoring = math.clamp(PriceAnchoringStrength, 0f, 1f);
             float anchoredPrice = math.lerp(rawPrice, sanitizedVanilla, anchoring);
 
-            float minMultiplier = math.max(0f, MinimumPriceMultiplier);
-            float maxMultiplier = math.max(0f, MaximumPriceMultiplier);
+            float minMultiplier = math.max(0f, 1f-MaximumPriceMultiplier);
+            float maxMultiplier = math.max(0f, 1f+MaximumPriceMultiplier);
             if (maxMultiplier < minMultiplier)
             {
                 float swapMultiplier = minMultiplier;
@@ -278,7 +337,7 @@ namespace MarketBasedEconomy.Economy
             {
                 Diagnostics.DiagnosticsLogger.Log(
                     "Economy",
-                    $"Elastic price for {resource}: vanilla={sanitizedVanilla:F2}, supply={sanitizedSupply:F1}, demand={sanitizedDemand:F1}, ratio={ratio:F3}, exponent={exponent:F2}, anchor={anchoring:F2}, smoothing={smoothing:F2}, bias={bias:F2}, raw={rawPrice:F2}, anchored={anchoredPrice:F2}, elastic={elasticPrice:F2}, blended={blendedPrice:F2}, final={finalPrice:F2}");
+                    $"Elastic price for {resource}: baseline={sanitizedVanilla:F2}, supply={sanitizedSupply:F1}, demand={sanitizedDemand:F1}, ratio={ratio:F3}, exponent={exponent:F2}, anchor={anchoring:F2}, smoothing={smoothing:F2}, bias={bias:F2}, raw={rawPrice:F2}, anchored={anchoredPrice:F2}, elastic={elasticPrice:F2}, blended={blendedPrice:F2}, final={finalPrice:F2}");
             }
 
             return finalPrice;
@@ -309,27 +368,29 @@ namespace MarketBasedEconomy.Economy
         /// </summary>
         public float AdjustMarketPrice(Resource resource, float vanillaPrice, bool skipLogging = false)
         {
+            float baselinePrice = ResolveBaselinePrice(resource, vanillaPrice);
+
             if (resource == Resource.Money)
             {
-                return vanillaPrice;
+                return baselinePrice;
             }
-            if (vanillaPrice <= 0f || resource == Resource.NoResource)
+            if (baselinePrice <= 0f || resource == Resource.NoResource)
             {
                 if (!skipLogging)
                 {
-                    Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust skipped for {resource}: vanilla={vanillaPrice:F2}.");
+                    Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust skipped for {resource}: baseline={baselinePrice:F2}.");
                 }
-                return vanillaPrice;
+                return baselinePrice;
             }
 
             if (IsZeroWeightResource(resource))
             {
                 if (!skipLogging)
                 {
-                    Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust skipped for zero-weight {resource}; using vanilla price {vanillaPrice:F2}.");
+                    Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust skipped for zero-weight {resource}; using baseline price {baselinePrice:F2}.");
                 }
 
-                return vanillaPrice;
+                return baselinePrice;
             }
 
             float supply;
@@ -338,12 +399,12 @@ namespace MarketBasedEconomy.Economy
             {
                 if (!skipLogging)
                 {
-                    Diagnostics.DiagnosticsLogger.Log("Economy", $"No supply/demand for {resource}; using vanilla price {vanillaPrice:F2}.");
+                    Diagnostics.DiagnosticsLogger.Log("Economy", $"No supply/demand for {resource}; using baseline price {baselinePrice:F2}.");
                 }
-                return vanillaPrice;
+                return baselinePrice;
             }
 
-            float finalPrice = ComputeElasticPrice(resource, vanillaPrice, supply, demand, skipLogging, out _);
+            float finalPrice = ComputeElasticPrice(resource, baselinePrice, supply, demand, skipLogging, out _);
             return finalPrice;
         }
 
@@ -354,22 +415,23 @@ namespace MarketBasedEconomy.Economy
         {
             float sanitizedIndustrial = math.max(0f, industrialComponent);
             float sanitizedService = math.max(0f, serviceComponent);
-            float vanillaTotal = sanitizedIndustrial + sanitizedService;
+            float baselineTotal = AlignComponentsToBaseline(resource, ref sanitizedIndustrial, ref sanitizedService);
+            float sanitizedTotal = math.max(0f, sanitizedIndustrial + sanitizedService);
 
-            if (vanillaTotal <= 0f || resource == Resource.NoResource || resource == Resource.Money)
+            if (sanitizedTotal <= 0f || resource == Resource.NoResource || resource == Resource.Money)
             {
                 float fallback = component switch
                 {
                     PriceComponent.Industrial => sanitizedIndustrial,
                     PriceComponent.Service => sanitizedService,
-                    _ => vanillaTotal
+                    _ => sanitizedTotal
                 };
 
                 if (!skipLogging)
                 {
                     Diagnostics.DiagnosticsLogger.Log(
                         "Economy",
-                        $"AdjustPriceComponent {component} for {resource}: vanillaTotal<=0, industrial={sanitizedIndustrial:F2}, service={sanitizedService:F2}, multiplier=1.00, returning {fallback:F2}");
+                        $"AdjustPriceComponent {component} for {resource}: baselineTotal<=0, industrial={sanitizedIndustrial:F2}, service={sanitizedService:F2}, multiplier=1.00, returning {fallback:F2}");
                 }
 
                 return fallback;
@@ -393,7 +455,7 @@ namespace MarketBasedEconomy.Economy
                 {
                     Diagnostics.DiagnosticsLogger.Log(
                         "Economy",
-                        $"AdjustPriceComponent {component} for {resource}: vanillaTotal={vanillaTotal:F2}, multiplier={multiplier:F3}, result={totalAdjusted:F2}");
+                        $"AdjustPriceComponent {component} for {resource}: baselineTotal={baselineTotal:F2}, multiplier={multiplier:F3}, result={totalAdjusted:F2}");
                 }
 
                 return totalAdjusted;
@@ -410,7 +472,7 @@ namespace MarketBasedEconomy.Economy
             {
                 Diagnostics.DiagnosticsLogger.Log(
                     "Economy",
-                    $"AdjustPriceComponent {component} for {resource}: vanillaTotal={vanillaTotal:F2}, multiplier={multiplier:F3}, biases=({industrialBias:F2},{serviceBias:F2}), industrial={sanitizedIndustrial:F2}->{industrialAdjusted:F2}, service={sanitizedService:F2}->{serviceAdjusted:F2}, result={result:F2}");
+                    $"AdjustPriceComponent {component} for {resource}: baselineTotal={baselineTotal:F2}, multiplier={multiplier:F3}, biases=({industrialBias:F2},{serviceBias:F2}), industrial={sanitizedIndustrial:F2}->{industrialAdjusted:F2}, service={sanitizedService:F2}->{serviceAdjusted:F2}, result={result:F2}");
             }
 
             return result;
@@ -655,8 +717,8 @@ namespace MarketBasedEconomy.Economy
                 state = new MarketPriceState
                 {
                     Multiplier = 1f,
-                    ExternalFloor = MinimumPriceMultiplier,
-                    ExternalCeiling = MaximumPriceMultiplier
+                    ExternalFloor = 1f-MaximumPriceMultiplier,
+                    ExternalCeiling = 1f+MaximumPriceMultiplier
                 };
             }
 
@@ -675,7 +737,7 @@ namespace MarketBasedEconomy.Economy
             }
 
             float ratio = demand / math.max(1f, supply);
-            float multiplier = math.clamp(ratio, MinimumPriceMultiplier, MaximumPriceMultiplier);
+            float multiplier = math.clamp(ratio, 1f-MaximumPriceMultiplier, 1f+MaximumPriceMultiplier);
             state.Multiplier = multiplier;
             m_PriceStates[(int)resource] = state;
 
