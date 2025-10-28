@@ -7,6 +7,7 @@ using Game.Settings;
 using Game.UI;
 using Game.UI.Localization;
 using MarketBasedEconomy.Analytics;
+using MarketBasedEconomy.Diagnostics;
 using MarketBasedEconomy.Economy;
 using Unity.Mathematics;
 using UnityEngine;
@@ -26,14 +27,37 @@ namespace MarketBasedEconomy
         [SettingsUISection(kSection, kEconomyGroup)]
         public bool EnableDiagnosticsLog
         {
-            get => Diagnostics.DiagnosticsLogger.Enabled;
+            get => DiagnosticsLogger.Enabled;
             set
             {
-                Diagnostics.DiagnosticsLogger.Enabled = value;
+                DiagnosticsLogger.Enabled = value;
                 if (value)
                 {
-                    Diagnostics.DiagnosticsLogger.Initialize();
+                    DiagnosticsLogger.Initialize();
+                    ProductChainLoggingFeature.RequestLogDump();
                 }
+            }
+        }
+
+        private bool m_EnableRealWorldBaselines;
+
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public bool EnableRealWorldBaselines
+        {
+            get => m_EnableRealWorldBaselines;
+            set
+            {
+                if (m_EnableRealWorldBaselines == value)
+                {
+                    if (value)
+                    {
+                        RealWorldBaselineFeature.Refresh();
+                    }
+                    return;
+                }
+
+                m_EnableRealWorldBaselines = value;
+                RealWorldBaselineFeature.Enabled = value;
             }
         }
 
@@ -50,6 +74,15 @@ namespace MarketBasedEconomy
         {
             get => MarketEconomyManager.Instance.ExternalPriceInfluence;
             set => MarketEconomyManager.Instance.ExternalPriceInfluence = math.clamp(value, 0f, 1f);
+        }
+
+        [SettingsUISlider(min = 0f, max = 1f, step = 0.05f)]
+        [SettingsUICustomFormat(fractionDigits = 2, separateThousands = false, maxValueWithFraction = 1f)]
+        [SettingsUISection(kSection, kEconomyGroup)]
+        public float MaximumPriceMultiplier
+        {
+            get => MarketEconomyManager.Instance.MaximumPriceMultiplier;
+            set => MarketEconomyManager.Instance.MaximumPriceMultiplier = math.clamp(value, 0f, 1f);
         }
 
         [SettingsUISlider(min = 0f, max = 1f, step = 0.05f)]
@@ -130,10 +163,9 @@ namespace MarketBasedEconomy
         public override void SetDefaults()
         {
             var marketManager = MarketEconomyManager.Instance;
-            marketManager.MinimumPriceMultiplier = 0.5f;
-            marketManager.MaximumPriceMultiplier = 2.5f;
+            marketManager.MaximumPriceMultiplier = 0.2f;
             marketManager.Sensitivity = 0.65f;
-            marketManager.ExternalPriceInfluence = 0.35f;
+            marketManager.ExternalPriceInfluence = 0.6f;
             marketManager.PriceAnchoringStrength = 0.1f;
             marketManager.LogisticSmoothingScale = 0.5f;
 
@@ -145,6 +177,7 @@ namespace MarketBasedEconomy
             laborManager.SkillShortagePremium = 0.8f;
             laborManager.EducationMismatchPremium = 0.2f;
 
+            EnableRealWorldBaselines = false;
             Diagnostics.DiagnosticsLogger.Enabled = false;
             CompanyProfitAdjustmentSystem.FeatureEnabled = false;
             EconomyAnalyticsConfig.ResetToDefaults();
@@ -187,6 +220,9 @@ namespace MarketBasedEconomy
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ExternalMarketWeight)), "External market weight" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ExternalMarketWeight)), "Blend factor between local supply-demand price and external trade price references." },
 
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MaximumPriceMultiplier)), "Market bound" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MaximumPriceMultiplier)), "Control the upper and lower bound of how far the market prices can deviate from the baseline." },
+
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MarketSensitivity)), "Market sensitivity" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.MarketSensitivity)), "Controls how strongly prices react to supply and demand imbalances." },
 
@@ -218,6 +254,9 @@ namespace MarketBasedEconomy
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.EnableCompanyTaxAdjustments)), "Enable company tax adjustments (Experimental Large Performance Impact)" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.EnableCompanyTaxAdjustments)), "Apply the experimental profit-based tax recalculation (Experimental Large Performance Impact)." },
+
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.EnableRealWorldBaselines)), "Use real-world baseline data (Alpha Experimental)" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.EnableRealWorldBaselines)), "Reset resource prices and company productivity using Config/RealWorldBaseline.json when the simulation loads." },
             };
         }
 

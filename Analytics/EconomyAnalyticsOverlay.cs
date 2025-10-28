@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Game.Economy;
+using MarketBasedEconomy.Economy;
 using UnityEngine;
 
 namespace MarketBasedEconomy.Analytics
@@ -245,10 +246,27 @@ namespace MarketBasedEconomy.Analytics
             m_LiveScroll = GUILayout.BeginScrollView(m_LiveScroll, GUILayout.Height(kLiveListHeight));
             foreach (var resource in m_FilteredResources)
             {
-                string priceText = EconomyAnalyticsRecorder.Instance.TryGetLatestPrice(resource, out float price)
-                    ? price.ToString("F2")
-                    : "—";
-                GUILayout.Label($"{resource}: {priceText}");
+                bool hasOriginal = RealWorldBaselineState.TryGetOriginalPrice(resource, out float originalPrice);
+                bool hasBaseline = RealWorldBaselineState.TryGetAppliedPrice(resource, out float baselinePrice);
+                bool hasLatest = EconomyAnalyticsRecorder.Instance.TryGetLatestPrice(resource, out float latestPrice);
+
+                string beforeText = hasOriginal ? originalPrice.ToString("F2") : "—";
+                string afterText = hasBaseline
+                    ? baselinePrice.ToString("F2")
+                    : hasLatest ? latestPrice.ToString("F2") : "—";
+
+                string liveSuffix = string.Empty;
+                if (hasBaseline && hasLatest && !Approximately(latestPrice, baselinePrice))
+                {
+                    liveSuffix = $" (live {latestPrice:F2})";
+                }
+
+                if (!hasOriginal && (hasBaseline || hasLatest))
+                {
+                    beforeText = hasBaseline ? afterText : latestPrice.ToString("F2");
+                }
+
+                GUILayout.Label($"{resource}: {beforeText} / {afterText}{liveSuffix}");
             }
             GUILayout.EndScrollView();
         }
@@ -838,6 +856,11 @@ namespace MarketBasedEconomy.Analytics
             GUI.Label(new Rect(rect.x - kYAxisLabelWidth, rect.y - 4f, kYAxisLabelWidth - 5f, 18f), max.ToString("F2"), m_RightAlignedLabel);
             GUI.Label(new Rect(rect.x - kYAxisLabelWidth, rect.y + rect.height * 0.5f - 9f, kYAxisLabelWidth - 5f, 18f), mid.ToString("F2"), m_RightAlignedLabel);
             GUI.Label(new Rect(rect.x - kYAxisLabelWidth, rect.y + rect.height - 16f, kYAxisLabelWidth - 5f, 18f), min.ToString("F2"), m_RightAlignedLabel);
+        }
+
+        private static bool Approximately(float lhs, float rhs)
+        {
+            return Mathf.Abs(lhs - rhs) <= 0.01f;
         }
 
     }
