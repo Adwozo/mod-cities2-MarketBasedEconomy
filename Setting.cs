@@ -17,7 +17,7 @@ namespace MarketBasedEconomy
     [FileLocation(nameof(MarketBasedEconomy))]
     [SettingsUIGroupOrder(kEconomyGroup, kKeybindingGroup)]
     [SettingsUIShowGroupName(kEconomyGroup, kKeybindingGroup)]
-    [SettingsUIKeyboardAction(Mod.kToggleOverlayActionName, ActionType.Button, usages: new string[] { Usages.kDefaultUsage }, interactions: new string[] { "Press" })]
+    [SettingsUIKeyboardAction(Mod.kToggleOverlayActionName, ActionType.Button, Game.Input.RebindOptions.All, usages: new string[] { Usages.kDefaultUsage }, interactions: new string[] { "Press" })]
     public class Setting : ModSetting
     {
         public const string kSection = "Main";
