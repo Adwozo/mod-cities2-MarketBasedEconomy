@@ -383,16 +383,6 @@ namespace MarketBasedEconomy.Economy
                 return baselinePrice;
             }
 
-            if (IsZeroWeightResource(resource))
-            {
-                if (!skipLogging)
-                {
-                    Diagnostics.DiagnosticsLogger.Log("Economy", $"Price adjust skipped for zero-weight {resource}; using baseline price {baselinePrice:F2}.");
-                }
-
-                return baselinePrice;
-            }
-
             float supply;
             float demand;
             if (!TryGetSupplyDemand(resource, out supply, out demand))
