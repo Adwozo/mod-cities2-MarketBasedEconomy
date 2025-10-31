@@ -99,6 +99,9 @@
 		<Reference Update="System.Data">
 			<Private>false</Private>
 		</Reference>
+		<Reference Update="Newtonsoft.Json">
+			<Private>false</Private>
+		</Reference>
 	</ItemGroup>
 
 	<ItemGroup>
